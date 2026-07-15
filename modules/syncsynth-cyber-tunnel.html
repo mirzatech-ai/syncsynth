@@ -1,0 +1,453 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+<title>SyncSynth — Cyber Tunnel</title>
+<style>
+  :root{
+    --bg:#02030a;
+    --ink:#eaf6ff;
+    --dim:#7b8aa8;
+    --cyan:#25f4ff;
+    --violet:#b46bff;
+    --line:rgba(120,160,220,.14);
+    --glass:rgba(10,16,30,.42);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;width:100%;overflow:hidden;background:var(--bg);color:var(--ink);
+    font-family:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;-webkit-user-select:none;user-select:none;touch-action:none;}
+  #scene{position:fixed;inset:0;display:block;z-index:0}
+
+  /* cinematic vignette + grain overlays */
+  #vignette{position:fixed;inset:0;z-index:2;pointer-events:none;
+    background:radial-gradient(120% 90% at 50% 46%, rgba(0,0,0,0) 40%, rgba(0,0,0,.35) 78%, rgba(0,0,0,.72) 100%);
+    mix-blend-mode:multiply}
+  #grain{position:fixed;inset:-50%;z-index:3;pointer-events:none;opacity:.05;
+    background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='140' height='140'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+    animation:grain 1.1s steps(3) infinite}
+  @keyframes grain{0%{transform:translate(0,0)}33%{transform:translate(-3%,2%)}66%{transform:translate(2%,-2%)}100%{transform:translate(0,0)}}
+
+  /* HUD */
+  #hud{position:fixed;z-index:5;left:22px;top:22px;padding:16px 18px 15px;width:min(300px,calc(100vw - 44px));
+    background:var(--glass);border:1px solid var(--line);border-radius:16px;
+    backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);
+    box-shadow:0 18px 60px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05);
+    transition:opacity .6s ease, transform .6s ease}
+  #hud.dim{opacity:.12;transform:translateY(-4px)}
+  #hud:hover{opacity:1;transform:none}
+  .brandrow{display:flex;align-items:center;gap:9px;margin-bottom:14px}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--cyan);
+    box-shadow:0 0 12px var(--cyan),0 0 26px rgba(37,244,255,.6);animation:pulse 2.6s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.55;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+  .brand{font-size:12px;letter-spacing:.34em;font-weight:700;text-transform:uppercase;color:var(--ink)}
+  .sub{font-size:10px;letter-spacing:.24em;color:var(--dim);text-transform:uppercase;margin-top:2px}
+
+  .btns{display:flex;gap:8px;margin:6px 0 4px}
+  button.src{flex:1;appearance:none;cursor:pointer;color:var(--ink);font:inherit;font-size:11px;
+    letter-spacing:.14em;text-transform:uppercase;padding:10px 8px;border-radius:10px;
+    background:linear-gradient(180deg,rgba(255,255,255,.05),rgba(255,255,255,.01));
+    border:1px solid var(--line);transition:.18s}
+  button.src:hover{border-color:rgba(37,244,255,.55);color:#fff;background:rgba(37,244,255,.08)}
+  button.src.on{border-color:var(--cyan);color:#eafcff;
+    box-shadow:0 0 0 1px rgba(37,244,255,.5),0 0 24px rgba(37,244,255,.22);background:rgba(37,244,255,.12)}
+
+  .status{font-size:10.5px;letter-spacing:.05em;color:var(--dim);margin:11px 2px 3px;min-height:14px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+  .ctrl{margin-top:13px}
+  .lab{display:flex;justify-content:space-between;font-size:9.5px;letter-spacing:.22em;
+    text-transform:uppercase;color:var(--dim);margin-bottom:7px}
+  .lab b{color:var(--ink);font-weight:600;letter-spacing:.1em}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:3px;border-radius:3px;
+    background:linear-gradient(90deg,var(--cyan),var(--violet));outline:none;cursor:pointer;opacity:.9}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;border-radius:50%;
+    background:#eafcff;border:2px solid #0a1120;box-shadow:0 0 10px rgba(37,244,255,.9),0 0 22px rgba(37,244,255,.45);cursor:pointer}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#eafcff;border:2px solid #0a1120;
+    box-shadow:0 0 10px rgba(37,244,255,.9);cursor:pointer}
+
+  #footer{position:fixed;z-index:5;right:22px;bottom:16px;font-size:10px;letter-spacing:.42em;
+    text-transform:uppercase;color:rgba(180,200,235,.42);font-weight:600;pointer-events:none;
+    text-shadow:0 0 18px rgba(37,244,255,.25)}
+
+  /* drag hint */
+  #drop{position:fixed;inset:0;z-index:6;display:none;align-items:center;justify-content:center;
+    background:rgba(4,8,18,.62);backdrop-filter:blur(3px)}
+  #drop.show{display:flex}
+  #drop .box{padding:34px 52px;border:1.5px dashed rgba(37,244,255,.6);border-radius:20px;
+    color:#eafcff;font-size:13px;letter-spacing:.24em;text-transform:uppercase;
+    box-shadow:0 0 60px rgba(37,244,255,.2) inset}
+
+  /* fallback */
+  #fallback{position:fixed;inset:0;z-index:9;display:none;align-items:center;justify-content:center;
+    flex-direction:column;text-align:center;padding:30px;background:radial-gradient(circle at 50% 40%,#0a1224,#02030a)}
+  #fallback.show{display:flex}
+  #fallback h1{font-size:15px;letter-spacing:.3em;text-transform:uppercase;color:var(--cyan);margin:0 0 12px}
+  #fallback p{font-size:12.5px;letter-spacing:.06em;color:var(--dim);max-width:430px;line-height:1.7;margin:0}
+</style>
+
+<canvas id="scene"></canvas>
+<div id="vignette"></div>
+<div id="grain"></div>
+
+<div id="hud">
+  <div class="brandrow">
+    <span class="dot"></span>
+    <div>
+      <div class="brand">Cyber Tunnel</div>
+      <div class="sub">Audio Reactive Engine</div>
+    </div>
+  </div>
+  <div class="btns">
+    <button class="src" id="btnMic">Microphone</button>
+    <button class="src" id="btnFile">Load Track</button>
+  </div>
+  <div class="status" id="status">Drop an audio file anywhere, or enable the mic.</div>
+
+  <div class="ctrl">
+    <div class="lab"><span>Intensity</span><b id="vInt">60</b></div>
+    <input type="range" id="sInt" min="0" max="1" step="0.01" value="0.6" />
+  </div>
+  <div class="ctrl">
+    <div class="lab"><span>Hue</span><b id="vHue">CYAN</b></div>
+    <input type="range" id="sHue" min="0" max="1" step="0.005" value="0.52" />
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept="audio/*" style="display:none" />
+
+<div id="footer">SyncSynth</div>
+
+<div id="drop"><div class="box">Release to load audio</div></div>
+
+<div id="fallback">
+  <h1>Signal Lost</h1>
+  <p id="fbMsg">This visualizer needs WebGL and a modern browser. Please enable hardware acceleration or try a different browser.</p>
+</div>
+
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js" onerror="window.__threeFail=true"></script>
+<script>
+(function(){
+  "use strict";
+
+  var fallback = document.getElementById('fallback');
+  var fbMsg    = document.getElementById('fbMsg');
+  function fail(msg){ if(msg) fbMsg.textContent = msg; fallback.classList.add('show'); }
+
+  if (window.__threeFail || typeof THREE === 'undefined'){
+    fail('Could not load the 3D engine (three.js). Check your connection and reload.');
+    return;
+  }
+
+  /* ---------- Renderer / Scene ---------- */
+  var canvas = document.getElementById('scene');
+  var renderer, scene, camera;
+  try{
+    renderer = new THREE.WebGLRenderer({ canvas:canvas, antialias:true, alpha:false, powerPreference:'high-performance' });
+  }catch(e){
+    fail('WebGL is unavailable on this device.');
+    return;
+  }
+  if(!renderer || !renderer.getContext()){ fail('WebGL context could not be created.'); return; }
+
+  var DPR = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(DPR);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x02030a, 1);
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;   // filmic rolloff -> fake-bloom white cores on additive peaks
+  renderer.toneMappingExposure = 1.18;
+
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x02030a, 0.0092);      // hides the far recycle seam, builds depth
+
+  camera = new THREE.PerspectiveCamera(72, window.innerWidth/window.innerHeight, 0.1, 2000);
+
+  /* ---------- Tunnel geometry (instanced rings) ---------- */
+  var N        = 120;                 // ring count (single draw call, GPU-instanced)
+  var SPACING  = 4.2;
+  var TOTAL    = N * SPACING;         // recycle wrap length
+  var NEARZ    = 9;                   // z where a ring sits when dist=0 (behind camera -> unseen pop)
+  var LOOK     = 45;                  // camera look-ahead distance along the path
+
+  var ringGeo = new THREE.TorusGeometry(1, 0.016, 6, 90);   // unit ring, scaled per-instance
+  var ringMat = new THREE.MeshBasicMaterial({
+    color:0xffffff, blending:THREE.AdditiveBlending, transparent:true,
+    depthWrite:false, depthTest:true, opacity:1
+  });
+  var rings = new THREE.InstancedMesh(ringGeo, ringMat, N);
+  rings.frustumCulled = false;
+  var tmpColor = new THREE.Color();
+  for (var i=0;i<N;i++) rings.setColorAt(i, tmpColor.setRGB(1,1,1));   // allocate instanceColor buffer
+  scene.add(rings);
+  var dummy = new THREE.Object3D();
+
+  /* ---------- Spark particles (high band) ---------- */
+  var NP = 1400;
+  var pAng = new Float32Array(NP), pRad = new Float32Array(NP), pBase = new Float32Array(NP);
+  var pPos = new Float32Array(NP*3);
+  for (var p=0;p<NP;p++){
+    pAng[p]  = Math.random()*Math.PI*2;
+    pRad[p]  = 0.15 + Math.random()*0.95;      // fraction of ring radius
+    pBase[p] = Math.random()*TOTAL;            // distance offset along tunnel
+  }
+  var pGeo = new THREE.BufferGeometry();
+  pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3));
+  var pMat = new THREE.PointsMaterial({
+    size:0.07, map:makeGlow(), transparent:true, blending:THREE.AdditiveBlending,
+    depthWrite:false, sizeAttenuation:true, color:0x9fefff, opacity:0.9
+  });
+  var sparks = new THREE.Points(pGeo, pMat);
+  sparks.frustumCulled = false;
+  scene.add(sparks);
+
+  /* ---------- End-of-tunnel light ---------- */
+  var glowMat = new THREE.SpriteMaterial({
+    map:makeGlow(), color:0x25f4ff, transparent:true, blending:THREE.AdditiveBlending,
+    depthWrite:false, opacity:0.55, fog:false
+  });
+  var glow = new THREE.Sprite(glowMat);
+  glow.frustumCulled = false;
+  scene.add(glow);
+  var GLOWDIST = 78;
+
+  function makeGlow(){
+    var s=128, c=document.createElement('canvas'); c.width=c.height=s;
+    var g=c.getContext('2d');
+    var rg=g.createRadialGradient(s/2,s/2,0,s/2,s/2,s/2);
+    rg.addColorStop(0,'rgba(255,255,255,1)');
+    rg.addColorStop(0.25,'rgba(255,255,255,.75)');
+    rg.addColorStop(0.55,'rgba(180,220,255,.25)');
+    rg.addColorStop(1,'rgba(255,255,255,0)');
+    g.fillStyle=rg; g.fillRect(0,0,s,s);
+    var t=new THREE.CanvasTexture(c); t.needsUpdate=true; return t;
+  }
+
+  /* ---------- Path (the wormhole spine) ---------- */
+  function pathX(t){ return Math.sin(t*0.018)*6.0 + Math.sin(t*0.006)*10.0; }
+  function pathY(t){ return Math.cos(t*0.013)*5.0 + Math.cos(t*0.009)*7.0; }
+
+  /* ---------- Math helpers ---------- */
+  function clamp(v,a,b){ return v<a?a:(v>b?b:v); }
+  function clamp01(v){ return v<0?0:(v>1?1:v); }
+  function smooth(e0,e1,x){ var t=clamp((x-e0)/(e1-e0),0,1); return t*t*(3-2*t); }
+  function wrap1(h){ h%=1; return h<0?h+1:h; }
+
+  /* ---------- Audio ---------- */
+  var actx=null, analyser=null, freq=null, band=null;
+  var fileSource=null, micSource=null, audioEl=null, micStream=null;
+  var activeInput='idle';
+  var bass=0.2, mid=0.2, high=0.15;
+
+  function ensureAudio(){
+    if(actx) return true;
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC){ setStatus('Web Audio not supported'); return false; }
+    actx = new AC();
+    analyser = actx.createAnalyser();
+    analyser.fftSize = 2048;
+    analyser.smoothingTimeConstant = 0.72;
+    freq = new Uint8Array(analyser.frequencyBinCount);
+    var binHz = actx.sampleRate / analyser.fftSize;
+    var bins = analyser.frequencyBinCount;
+    function idx(hz){ return clamp(Math.round(hz/binHz),0,bins-1); }
+    band = {
+      bass:[idx(20),  idx(160)],
+      mid :[idx(160), idx(2000)],
+      high:[idx(2000),idx(8000)]
+    };
+    return true;
+  }
+
+  function avg(r){ var s=0,a=r[0],b=r[1]; for(var k=a;k<=b;k++) s+=freq[k]; return s/((b-a+1)*255); }
+
+  function readBands(t){
+    var br,mr,hr;
+    if(activeInput!=='idle' && analyser){
+      analyser.getByteFrequencyData(freq);
+      br=avg(band.bass); mr=avg(band.mid); hr=avg(band.high);
+      // floor with a faint idle breath so silence isn't dead
+      br=Math.max(br, 0.10+0.05*Math.sin(t*1.6));
+      mr=Math.max(mr, 0.09+0.05*Math.sin(t*0.9+1.0));
+      hr=Math.max(hr, 0.06+0.04*Math.sin(t*2.2+2.0));
+    } else {
+      // autonomous idle motion — keeps a 24/7 stream alive with no input
+      br=clamp01(0.30+0.18*Math.sin(t*0.8)+0.06*Math.sin(t*1.9));
+      mr=clamp01(0.24+0.13*Math.sin(t*0.9+1.3));
+      hr=clamp01(0.17+0.11*Math.sin(t*1.5+0.5));
+    }
+    // fast attack / slow release -> percussive punch
+    bass += (br>bass ? (br-bass)*0.50 : (br-bass)*0.08);
+    mid  += (mr>mid  ? (mr-mid )*0.35 : (mr-mid )*0.10);
+    high += (hr>high ? (hr-high)*0.45 : (hr-high)*0.12);
+  }
+
+  /* ---------- Input handlers ---------- */
+  var status=document.getElementById('status');
+  var btnMic=document.getElementById('btnMic'), btnFile=document.getElementById('btnFile');
+  var fileInput=document.getElementById('fileInput');
+  function setStatus(t){ status.textContent=t; }
+  function markActive(which){ btnMic.classList.toggle('on',which==='mic'); btnFile.classList.toggle('on',which==='file'); }
+
+  function useMic(){
+    if(!ensureAudio()) return;
+    actx.resume();
+    if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ setStatus('Microphone not available'); return; }
+    navigator.mediaDevices.getUserMedia({ audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false} })
+      .then(function(stream){
+        micStream=stream;
+        if(fileSource){ try{fileSource.disconnect();}catch(e){} if(audioEl) audioEl.pause(); }
+        if(micSource){ try{micSource.disconnect();}catch(e){} }
+        micSource = actx.createMediaStreamSource(stream);
+        micSource.connect(analyser);            // analysis only — never to destination (feedback)
+        activeInput='mic'; setStatus('Microphone live'); markActive('mic');
+      })
+      .catch(function(){ setStatus('Microphone access denied'); });
+  }
+
+  function loadFile(file){
+    if(!file){ return; }
+    var ok=/audio\//i.test(file.type) || /\.(mp3|wav|ogg|m4a|aac|flac|opus|webm)$/i.test(file.name);
+    if(!ok){ setStatus('Not an audio file'); return; }
+    if(!ensureAudio()) return;
+    actx.resume();
+    if(!audioEl){
+      audioEl=new Audio(); audioEl.loop=true; audioEl.crossOrigin='anonymous';
+      fileSource=actx.createMediaElementSource(audioEl);   // element can bind a source only once
+    }
+    if(micSource){ try{micSource.disconnect();}catch(e){} micSource=null;
+      if(micStream){ micStream.getTracks().forEach(function(tr){tr.stop();}); micStream=null; } }
+    try{fileSource.disconnect();}catch(e){}
+    fileSource.connect(analyser);
+    fileSource.connect(actx.destination);       // audible playback
+    try{ audioEl.src=URL.createObjectURL(file); }catch(e){}
+    audioEl.play().then(function(){
+      activeInput='file'; setStatus('Now playing — '+file.name); markActive('file');
+    }).catch(function(){ setStatus('Tap the visual to start playback'); activeInput='file'; markActive('file'); });
+  }
+
+  btnMic.addEventListener('click', useMic);
+  btnFile.addEventListener('click', function(){ fileInput.click(); });
+  fileInput.addEventListener('change', function(){ if(fileInput.files[0]) loadFile(fileInput.files[0]); });
+  canvas.addEventListener('click', function(){ if(actx) actx.resume(); if(audioEl && activeInput==='file' && audioEl.paused) audioEl.play(); });
+
+  // drag & drop anywhere
+  var drop=document.getElementById('drop');
+  window.addEventListener('dragover', function(e){ e.preventDefault(); drop.classList.add('show'); });
+  window.addEventListener('dragleave', function(e){ if(e.relatedTarget===null||e.clientX<=0||e.clientY<=0) drop.classList.remove('show'); });
+  window.addEventListener('drop', function(e){
+    e.preventDefault(); drop.classList.remove('show');
+    var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    if(f) loadFile(f);
+  });
+
+  /* ---------- Sliders ---------- */
+  var sInt=document.getElementById('sInt'), sHue=document.getElementById('sHue');
+  var vInt=document.getElementById('vInt'), vHue=document.getElementById('vHue');
+  var HUE_NAMES=['CRIMSON','AMBER','LIME','MINT','CYAN','AZURE','VIOLET','MAGENTA'];
+  function refInt(){ vInt.textContent=Math.round(sInt.value*100); }
+  function refHue(){ vHue.textContent=HUE_NAMES[clamp(Math.floor(sHue.value*HUE_NAMES.length),0,HUE_NAMES.length-1)]; }
+  sInt.addEventListener('input', refInt); sHue.addEventListener('input', refHue);
+  refInt(); refHue();
+
+  /* ---------- HUD auto-dim ---------- */
+  var hud=document.getElementById('hud'), dimT=null;
+  function wake(){ hud.classList.remove('dim'); clearTimeout(dimT); dimT=setTimeout(function(){hud.classList.add('dim');},3800); }
+  window.addEventListener('mousemove', wake); window.addEventListener('touchstart', wake); wake();
+
+  /* ---------- Resize ---------- */
+  function onResize(){
+    var w=window.innerWidth,h=window.innerHeight;
+    camera.aspect=w/h; camera.updateProjectionMatrix();
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
+    renderer.setSize(w,h);
+  }
+  window.addEventListener('resize', onResize);
+
+  /* ---------- Render loop ---------- */
+  var clock = new THREE.Clock();
+  var travel = 0;
+  var lost=false;
+  canvas.addEventListener('webglcontextlost', function(e){ e.preventDefault(); lost=true; fail('Graphics context was lost. Please reload the page.'); });
+
+  function animate(){
+    requestAnimationFrame(animate);
+    if(lost) return;
+
+    var dt = Math.min(clock.getDelta(), 0.05);   // clamp tab-switch spikes
+    var t  = clock.elapsedTime;
+    readBands(t);
+
+    var intensity = +sInt.value;
+    var react     = 0.5 + intensity*1.35;
+    var hueSet    = +sHue.value;
+
+    // bass+tempo drive forward speed (reads as ring spacing/tempo); mid swells the tube; hue drifts with mid
+    var speed     = 20 * (0.75 + bass*react*1.05);
+    travel += speed*dt;
+    var spacingMul = 1 + bass*react*0.14;
+    var baseR      = 3.30 + mid*react*0.55 + bass*0.35;
+    var hueBase    = wrap1(hueSet + mid*0.10 + t*0.008);
+
+    // camera flies the spine
+    var camX=pathX(travel), camY=pathY(travel);
+    camera.position.set(camX, camY, 5);
+    camera.lookAt(pathX(travel+LOOK), pathY(travel+LOOK), NEARZ - LOOK*spacingMul);
+    camera.fov = 72 + bass*react*7;
+    camera.updateProjectionMatrix();
+    camera.rotateZ(Math.sin(t*0.13)*0.06 + mid*react*0.03);   // hypnotic barrel roll
+
+    // ---- rings ----
+    var brightBase = 0.55 + high*react*0.65;
+    var bassPush   = 1.0 + bass*react*0.7;                    // pushes peaks HDR -> white-hot cores (fake bloom)
+    for (var i=0;i<N;i++){
+      var dist = ((i*SPACING - travel) % TOTAL + TOTAL) % TOTAL;   // 0..TOTAL, scrolls, auto-recycles
+      var wz   = NEARZ - dist*spacingMul;
+      var wt   = dist + travel;
+      var rad  = baseR + Math.sin(dist*0.20 + t*0.6)*0.22;         // gentle organic variation
+
+      dummy.position.set(pathX(wt), pathY(wt), wz);
+      dummy.rotation.set(0,0,0);
+      dummy.scale.setScalar(rad);
+      dummy.updateMatrix();
+      rings.setMatrixAt(i, dummy.matrix);
+
+      var nf = smooth(NEARZ-1.5, 2.0, wz);                         // fade rings as they sweep past the camera
+      var shimmer = 0.85 + 0.30*Math.sin(dist*0.30 - t*3.0);
+      var hueI = wrap1(hueBase + (dist/TOTAL)*0.34);               // depth gradient: cyan -> violet
+      var b = brightBase * nf * shimmer * bassPush;
+      tmpColor.setHSL(hueI, 0.85, 0.55);
+      tmpColor.r*=b; tmpColor.g*=b; tmpColor.b*=b;
+      rings.setColorAt(i, tmpColor);
+    }
+    rings.instanceMatrix.needsUpdate = true;
+    if(rings.instanceColor) rings.instanceColor.needsUpdate = true;
+
+    // ---- sparks ----
+    var pspeed = 1.55;   // stream a touch faster than the rings
+    for (var j=0;j<NP;j++){
+      var d = ((pBase[j] - travel*pspeed) % TOTAL + TOTAL) % TOTAL;
+      var wzp = NEARZ - d*spacingMul;
+      var wtp = d + travel;
+      var rr  = pRad[j]*(baseR*0.94);
+      var o=j*3;
+      pPos[o]   = pathX(wtp) + Math.cos(pAng[j])*rr;
+      pPos[o+1] = pathY(wtp) + Math.sin(pAng[j])*rr;
+      pPos[o+2] = wzp;
+    }
+    pGeo.attributes.position.needsUpdate = true;
+    pMat.size = 0.05 + high*react*0.11;
+    pMat.opacity = 0.45 + high*0.5;
+
+    // ---- end light ----
+    var gwt = travel + GLOWDIST;
+    glow.position.set(pathX(gwt), pathY(gwt), NEARZ - GLOWDIST*spacingMul);
+    var gs = 26 + bass*react*26 + mid*8;
+    glow.scale.set(gs, gs, 1);
+    glowMat.color.setHSL(wrap1(hueBase+0.16), 0.8, 0.6);
+    glowMat.opacity = 0.42 + high*0.35 + bass*0.15;
+
+    renderer.render(scene, camera);
+  }
+
+  onResize();
+  animate();
+})();
+</script>

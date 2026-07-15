@@ -1,0 +1,582 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>SyncSynth — Synthwave Grid</title>
+<style>
+  :root{
+    --mag:#ff2d95;
+    --cyan:#16f2ff;
+    --amber:#ff8a3d;
+    --ink:#04010a;
+    --hud-bg:rgba(14,4,26,0.42);
+    --hud-brd:rgba(255,45,149,0.28);
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{width:100%;height:100%;overflow:hidden;background:#04010a;color:#eae6ff;
+    font-family:"SF Mono",ui-monospace,"Cascadia Mono","Roboto Mono",Menlo,Consolas,monospace;
+    -webkit-font-smoothing:antialiased;}
+  #app{position:fixed;inset:0;}
+  canvas{display:block;position:absolute;inset:0;width:100%;height:100%;}
+
+  /* CRT grade + vignette overlay — pure CSS, no per-frame cost */
+  #grade{position:fixed;inset:0;pointer-events:none;z-index:5;mix-blend-mode:screen;
+    background:
+      radial-gradient(120% 80% at 50% 62%, rgba(255,45,149,0.05), rgba(0,0,0,0) 55%),
+      radial-gradient(90% 60% at 50% 38%, rgba(22,242,255,0.04), rgba(0,0,0,0) 60%);}
+  #vig{position:fixed;inset:0;pointer-events:none;z-index:6;
+    background:radial-gradient(130% 120% at 50% 52%, rgba(0,0,0,0) 52%, rgba(2,0,6,0.72) 100%);}
+  #scan{position:fixed;inset:0;pointer-events:none;z-index:7;opacity:.14;
+    background:repeating-linear-gradient(0deg, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(0,0,0,0.6) 3px, rgba(0,0,0,0) 4px);}
+
+  /* ---------- HUD ---------- */
+  #hud{position:fixed;left:20px;bottom:20px;z-index:10;width:250px;
+    background:var(--hud-bg);backdrop-filter:blur(14px) saturate(140%);
+    -webkit-backdrop-filter:blur(14px) saturate(140%);
+    border:1px solid var(--hud-brd);border-radius:14px;padding:15px 15px 13px;
+    box-shadow:0 0 0 1px rgba(0,0,0,0.35), 0 18px 50px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.06);
+    user-select:none;transition:opacity .5s ease;}
+  #hud .brandline{display:flex;align-items:center;gap:8px;margin-bottom:12px;}
+  #hud .dot{width:8px;height:8px;border-radius:50%;background:var(--mag);
+    box-shadow:0 0 10px var(--mag),0 0 20px var(--mag);animation:pulse 2.4s ease-in-out infinite;}
+  @keyframes pulse{0%,100%{opacity:.45;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+  #hud .title{font-size:12px;letter-spacing:3px;color:#fff;font-weight:600;}
+  #hud .title b{color:var(--cyan);}
+  .row{display:flex;gap:8px;margin-bottom:11px;}
+  button.src{flex:1;appearance:none;cursor:pointer;font:inherit;font-size:10.5px;letter-spacing:1.4px;
+    padding:9px 6px;border-radius:9px;color:#dfe9ff;
+    background:linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.015));
+    border:1px solid rgba(180,200,255,0.16);transition:.18s ease;text-transform:uppercase;}
+  button.src:hover{border-color:var(--cyan);color:#fff;box-shadow:0 0 16px rgba(22,242,255,0.28);}
+  button.src.active{border-color:var(--mag);color:#fff;
+    background:linear-gradient(180deg, rgba(255,45,149,0.28), rgba(255,45,149,0.06));
+    box-shadow:0 0 20px rgba(255,45,149,0.4), inset 0 0 12px rgba(255,45,149,0.2);}
+  .ctl{margin-bottom:9px;}
+  .ctl label{display:flex;justify-content:space-between;font-size:9.5px;letter-spacing:1.6px;
+    text-transform:uppercase;color:#9aa6d6;margin-bottom:5px;}
+  .ctl label span{color:var(--cyan);}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:3px;border-radius:3px;
+    background:linear-gradient(90deg,var(--mag),var(--cyan));outline:none;cursor:pointer;}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+    background:#fff;border:2px solid var(--mag);box-shadow:0 0 10px var(--mag);cursor:pointer;}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:#fff;
+    border:2px solid var(--mag);box-shadow:0 0 10px var(--mag);cursor:pointer;}
+  #nowPlaying{font-size:9px;letter-spacing:1px;color:#8b93bf;margin-top:9px;height:11px;
+    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  #nowPlaying b{color:var(--amber);}
+
+  /* meters */
+  .meters{display:flex;gap:5px;margin-top:11px;align-items:flex-end;height:22px;}
+  .meters .m{flex:1;height:100%;border-radius:3px;background:rgba(255,255,255,0.05);position:relative;overflow:hidden;}
+  .meters .m i{position:absolute;left:0;right:0;bottom:0;height:2%;border-radius:3px;transition:height .06s linear;}
+  .m.bass i{background:linear-gradient(0deg,var(--mag),#ff9ecb);box-shadow:0 0 8px var(--mag);}
+  .m.mid  i{background:linear-gradient(0deg,#b06bff,#e0c3ff);box-shadow:0 0 8px #b06bff;}
+  .m.high i{background:linear-gradient(0deg,var(--cyan),#c8fbff);box-shadow:0 0 8px var(--cyan);}
+
+  #foot{position:fixed;right:22px;bottom:20px;z-index:10;font-size:11px;letter-spacing:5px;
+    color:rgba(234,230,255,0.5);text-transform:uppercase;pointer-events:none;
+    text-shadow:0 0 14px rgba(22,242,255,0.35);}
+  #foot b{color:rgba(255,255,255,0.85);font-weight:600;}
+
+  /* drop overlay */
+  #drop{position:fixed;inset:0;z-index:40;display:none;align-items:center;justify-content:center;
+    background:rgba(4,1,10,0.72);backdrop-filter:blur(3px);}
+  #drop.show{display:flex;}
+  #drop .box{padding:44px 70px;border:2px dashed var(--cyan);border-radius:20px;text-align:center;
+    box-shadow:0 0 60px rgba(22,242,255,0.35), inset 0 0 40px rgba(22,242,255,0.1);}
+  #drop .box h2{font-size:16px;letter-spacing:4px;color:#fff;margin-bottom:8px;}
+  #drop .box p{font-size:11px;letter-spacing:2px;color:var(--cyan);}
+
+  /* fallback / message */
+  #msg{position:fixed;inset:0;z-index:60;display:none;align-items:center;justify-content:center;padding:30px;
+    background:radial-gradient(80% 80% at 50% 45%, #12061f, #04010a);}
+  #msg.show{display:flex;}
+  #msg .card{max-width:440px;text-align:center;}
+  #msg .card .mk{font-size:13px;letter-spacing:6px;color:var(--mag);text-shadow:0 0 18px var(--mag);margin-bottom:18px;}
+  #msg .card h1{font-size:20px;letter-spacing:2px;color:#fff;margin-bottom:14px;font-weight:600;}
+  #msg .card p{font-size:12.5px;line-height:1.7;color:#a8afd6;letter-spacing:.4px;}
+
+  /* boot toast */
+  #toast{position:fixed;top:22px;left:50%;transform:translateX(-50%) translateY(-14px);z-index:11;
+    font-size:10.5px;letter-spacing:3px;text-transform:uppercase;color:#cfd6ff;
+    background:var(--hud-bg);border:1px solid var(--hud-brd);border-radius:30px;padding:9px 20px;
+    backdrop-filter:blur(12px);opacity:0;transition:opacity .6s ease, transform .6s ease;
+    box-shadow:0 0 30px rgba(255,45,149,0.18);}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+
+  @media (max-width:560px){
+    #hud{width:calc(100% - 40px);}
+    #foot{font-size:9px;letter-spacing:3px;bottom:auto;top:18px;right:18px;}
+  }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="grade"></div>
+<div id="vig"></div>
+<div id="scan"></div>
+
+<div id="toast">◇ drop an audio file anywhere</div>
+
+<div id="hud">
+  <div class="brandline"><span class="dot"></span><span class="title">SYNC<b>SYNTH</b> // GRID</span></div>
+  <div class="row">
+    <button class="src" id="btnMic">◉ Microphone</button>
+    <button class="src" id="btnFile">▤ Load Audio</button>
+  </div>
+  <div class="ctl">
+    <label>Intensity <span id="vInt">1.00</span></label>
+    <input id="sInt" type="range" min="0" max="2" step="0.01" value="1">
+  </div>
+  <div class="ctl">
+    <label>Hue Drift <span id="vHue">0°</span></label>
+    <input id="sHue" type="range" min="0" max="360" step="1" value="0">
+  </div>
+  <div class="meters">
+    <div class="m bass"><i id="mB"></i></div>
+    <div class="m mid"><i id="mM"></i></div>
+    <div class="m high"><i id="mH"></i></div>
+  </div>
+  <div id="nowPlaying">source: <b>idle demo</b></div>
+</div>
+
+<div id="foot"><b>SyncSynth</b></div>
+
+<div id="drop"><div class="box"><h2>DROP TO PLAY</h2><p>mp3 · wav · ogg · flac</p></div></div>
+
+<div id="msg"><div class="card">
+  <div class="mk">SYNCSYNTH</div>
+  <h1 id="msgH">Unavailable</h1>
+  <p id="msgP"></p>
+</div></div>
+
+<input id="fileInput" type="file" accept="audio/*" style="display:none">
+
+<!-- Three.js — pinned UMD build (exposes global THREE) -->
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var msgEl = document.getElementById('msg');
+  var msgH  = document.getElementById('msgH');
+  var msgP  = document.getElementById('msgP');
+  function fail(title, body){
+    msgH.textContent = title;
+    msgP.textContent = body;
+    msgEl.classList.add('show');
+  }
+
+  // ---- ensure THREE loaded (graceful, with silent same-package module fallback) ----
+  function boot(){
+    if (typeof THREE === 'undefined'){
+      var s = document.createElement('script');
+      s.type = 'module';
+      s.textContent =
+        "import * as T from 'https://unpkg.com/three@0.160.0/build/three.module.js';"+
+        "window.THREE=T; window.dispatchEvent(new Event('three-ready'));";
+      s.onerror = function(){ fail('Renderer offline',
+        'Three.js could not be loaded from the CDN. Check the network connection and reload.'); };
+      window.addEventListener('three-ready', start, {once:true});
+      document.head.appendChild(s);
+      setTimeout(function(){ if(typeof THREE==='undefined' && !window.__ss_started) fail('Renderer offline',
+        'Three.js could not be loaded from the CDN. Check the network connection and reload.'); }, 6000);
+    } else {
+      start();
+    }
+  }
+
+  function start(){
+    if(window.__ss_started) return; window.__ss_started = true;
+    try { runVisual(); }
+    catch(e){
+      console.error(e);
+      fail('WebGL error', 'This visual needs WebGL, which your browser or GPU refused to start. Try a different browser or enable hardware acceleration.');
+    }
+  }
+
+  // ============================================================================
+  function runVisual(){
+    // ---- WebGL capability probe ----
+    var probe = document.createElement('canvas');
+    var gl = probe.getContext('webgl2') || probe.getContext('webgl') || probe.getContext('experimental-webgl');
+    if(!gl){
+      fail('WebGL unavailable', 'Your browser could not create a WebGL context, so the grid can’t render. Enable hardware acceleration or try Chrome/Firefox.');
+      return;
+    }
+
+    // shared hue-rotation GLSL (used by 3 materials)
+    var HUE_GLSL =
+      "vec3 hshift(vec3 c,float a){ float s=sin(a),co=cos(a);"+
+      "mat3 m=mat3(0.299,0.587,0.114,0.299,0.587,0.114,0.299,0.587,0.114)+"+
+      "mat3(0.701,-0.587,-0.114,-0.299,0.413,-0.114,-0.300,-0.588,0.886)*co+"+
+      "mat3(0.168,0.330,-0.497,-0.328,0.035,0.292,1.250,-1.050,-0.203)*s; return clamp(m*c,0.0,1.0);}";
+
+    var app = document.getElementById('app');
+    var renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:'high-performance' });
+    renderer.setClearColor(0x04010a, 1);
+    var DPR = Math.min(window.devicePixelRatio || 1, 2); // cap DPR for fps
+    renderer.setPixelRatio(DPR);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    app.appendChild(renderer.domElement);
+
+    var scene  = new THREE.Scene();
+    var camera = new THREE.PerspectiveCamera(72, window.innerWidth/window.innerHeight, 0.1, 900);
+    camera.position.set(0, 4.2, 12);
+    camera.lookAt(0, 5.4, -120);
+
+    // ---- shared audio-driven uniforms (reused every frame, no per-frame allocs) ----
+    var U = {
+      uTime:{value:0}, uBass:{value:0}, uMid:{value:0}, uHigh:{value:0},
+      uInt:{value:1}, uHue:{value:0},
+      uMag:{value:new THREE.Color(0xff2d95)},
+      uCyan:{value:new THREE.Color(0x16f2ff)},
+      uAmber:{value:new THREE.Color(0xff8a3d)}
+    };
+
+    // ======================= SKY GRADIENT (backdrop) =======================
+    var sky = new THREE.Mesh(new THREE.PlaneGeometry(2,2), new THREE.ShaderMaterial({
+      depthWrite:false, depthTest:false,
+      uniforms:{ uHue:U.uHue, uMag:U.uMag, uCyan:U.uCyan, uBass:U.uBass, uTime:U.uTime },
+      vertexShader:
+        "varying vec2 vUv; void main(){ vUv=uv; gl_Position=vec4(position.xy,0.999,1.0); }",
+      fragmentShader:
+        "precision highp float; varying vec2 vUv;"+
+        "uniform float uHue,uBass,uTime; uniform vec3 uMag,uCyan;"+ HUE_GLSL +
+        "void main(){"+
+          "float y=vUv.y;"+
+          "vec3 top=vec3(0.02,0.005,0.05);"+
+          "vec3 mid=mix(vec3(0.12,0.02,0.16), uMag*0.35, 0.5);"+
+          "vec3 hor=mix(uMag, uCyan, 0.35)*(0.5+uBass*0.6);"+
+          "float horizon=smoothstep(0.30,0.52,y)*(1.0-smoothstep(0.52,0.72,y));"+
+          "vec3 col=mix(top, mid, smoothstep(0.5,0.98,y));"+
+          "col=mix(col, top, smoothstep(0.62,1.0,y));"+
+          "col+=hor*horizon*0.6;"+
+          "col+=0.015*sin(vUv.x*40.0+uTime*0.4)*horizon;"+
+          "col=hshift(col,radians(uHue));"+
+          "gl_FragColor=vec4(col,1.0);"+
+        "}"
+    }));
+    sky.frustumCulled = false; sky.renderOrder = -10; scene.add(sky);
+
+    // ======================= NEON SUN =======================
+    var sunMat = new THREE.ShaderMaterial({
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+      uniforms:{ uTime:U.uTime, uBass:U.uBass, uHue:U.uHue, uInt:U.uInt, uMag:U.uMag, uCyan:U.uCyan, uAmber:U.uAmber },
+      vertexShader:
+        "varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }",
+      fragmentShader:
+        "precision highp float; varying vec2 vUv;"+
+        "uniform float uTime,uBass,uHue,uInt; uniform vec3 uMag,uCyan,uAmber;"+ HUE_GLSL +
+        "void main(){"+
+          "vec2 p=(vUv-0.5)*2.0;"+
+          "float d=length(p);"+
+          "float disc=1.0-smoothstep(0.72,0.80,d);"+
+          "float glow=pow(max(0.0,1.0-d*0.62),2.4);"+
+          "vec3 grad=mix(uMag, uAmber, clamp(vUv.y*1.15-0.05,0.0,1.0));"+
+          // horizontal slats that widen toward the bottom
+          "float slat=1.0;"+
+          "if(vUv.y<0.5){"+
+             "float k=(0.5-vUv.y)*2.0;"+
+             "float freq=mix(52.0,9.0,k);"+
+             "float duty=mix(0.42,0.92,k);"+
+             "slat=step(fract(vUv.y*freq), 1.0-duty);"+
+          "}"+
+          "float body=disc*slat;"+
+          "float bassBoost=1.0+uBass*1.4;"+
+          "vec3 col=grad*body*(1.6*bassBoost);"+
+          "col+=mix(uMag,uAmber,0.55)*glow*(0.6+uBass*0.9);"+   // warmer inner bloom -> orange reads
+          "col*=uInt;"+
+          "col=hshift(col,radians(uHue));"+
+          "float a=clamp(body+glow*0.9,0.0,1.0);"+
+          "gl_FragColor=vec4(col,a);"+
+        "}"
+    });
+    var sun = new THREE.Mesh(new THREE.PlaneGeometry(64,64), sunMat);
+    sun.position.set(0, 17, -300); sun.renderOrder = -5; scene.add(sun);
+
+    // soft additive halo behind the sun (extra bloom feel)
+    var haloTex = makeRadialTexture();
+    var halo = new THREE.Sprite(new THREE.SpriteMaterial({
+      map:haloTex, color:0xff2d95, transparent:true, blending:THREE.AdditiveBlending,
+      depthWrite:false, depthTest:false, opacity:0.5
+    }));
+    halo.position.set(0, 17, -308); halo.scale.set(190,190,1); halo.renderOrder = -6; scene.add(halo);
+
+    // ======================= STARFIELD =======================
+    var STAR_N = 900; // capped for fps
+    var starGeo = new THREE.BufferGeometry();
+    var sp = new Float32Array(STAR_N*3);
+    var sPhase = new Float32Array(STAR_N);
+    for(var i=0;i<STAR_N;i++){
+      sp[i*3]   = (Math.random()-0.5)*760;
+      sp[i*3+1] = 16 + Math.random()*150;
+      sp[i*3+2] = -70 - Math.random()*620;
+      sPhase[i] = Math.random()*6.28318;
+    }
+    starGeo.setAttribute('position', new THREE.BufferAttribute(sp,3));
+    starGeo.setAttribute('aPhase',   new THREE.BufferAttribute(sPhase,1));
+    var stars = new THREE.Points(starGeo, new THREE.ShaderMaterial({
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+      uniforms:{ uTime:U.uTime, uHigh:U.uHigh, uCyan:U.uCyan, uPix:{value:DPR} },
+      vertexShader:
+        "attribute float aPhase; varying float vTw; uniform float uTime,uHigh,uPix;"+
+        "void main(){"+
+          "vTw=0.45+0.55*sin(uTime*2.2+aPhase)+uHigh*1.2;"+
+          "vec4 mv=modelViewMatrix*vec4(position,1.0);"+
+          "gl_Position=projectionMatrix*mv;"+
+          "float sz=(1.4+2.6*(0.5+0.5*sin(aPhase)))*(1.0+uHigh*1.5);"+
+          "gl_PointSize=sz*uPix*(220.0/-mv.z);"+
+        "}",
+      fragmentShader:
+        "precision mediump float; varying float vTw; uniform vec3 uCyan;"+
+        "void main(){"+
+          "vec2 c=gl_PointCoord-0.5; float d=length(c);"+
+          "float a=smoothstep(0.5,0.0,d);"+
+          "vec3 col=mix(vec3(1.0), uCyan, 0.4)*vTw;"+
+          "gl_FragColor=vec4(col, a*clamp(vTw,0.0,1.0));"+
+        "}"
+    }));
+    stars.frustumCulled = false; scene.add(stars);
+
+    // ======================= INFINITE GRID =======================
+    // One static plane; the neon lines scroll in the shader -> "infinite" & alloc-free.
+    var GW = 120, GD = 620, WSEG = 120, DSEG = 200; // ~24k verts, comfortably 60fps
+    var gridMat = new THREE.ShaderMaterial({
+      transparent:true, extensions:{ derivatives:true },
+      uniforms:{
+        uTime:U.uTime, uBass:U.uBass, uMid:U.uMid, uHigh:U.uHigh,
+        uInt:U.uInt, uHue:U.uHue, uMag:U.uMag, uCyan:U.uCyan
+      },
+      vertexShader:
+        "precision highp float;"+
+        "uniform float uTime,uBass,uMid; varying vec2 vUv; varying float vFade; varying float vElev;"+
+        "float hash(float n){ return fract(sin(n)*43758.5453123); }"+
+        "void main(){"+
+          "vUv=uv;"+
+          "vec3 pos=position;"+
+          "float scroll=uTime*7.0;"+
+          "float depth=uv.y*40.0 - scroll;"+
+          "float ridge=pow(max(0.0,sin(depth*3.14159)),6.0);"+
+          "float rnd=hash(floor(depth));"+
+          "float edge=pow(abs(uv.x-0.5)*2.0,2.3);"+
+          "float h=0.0;"+
+          "h+=ridge*(0.25+uBass*3.4)*rnd;"+
+          "h+=edge*(2.0+uBass*5.0+uMid*2.0);"+
+          "h+=sin(uv.x*24.0+uTime*1.3)*0.12;"+
+          "float lane=1.0-smoothstep(0.06,0.20,abs(uv.x-0.5));"+
+          "h*=mix(1.0,0.25,lane);"+
+          "pos.z+=h;"+                 // local z -> world height after mesh rotation
+          "vElev=h; vFade=uv.y;"+
+          "gl_Position=projectionMatrix*modelViewMatrix*vec4(pos,1.0);"+
+        "}",
+      fragmentShader:
+        "precision highp float;"+
+        "varying vec2 vUv; varying float vFade; varying float vElev;"+
+        "uniform float uTime,uBass,uMid,uHigh,uInt,uHue; uniform vec3 uMag,uCyan;"+ HUE_GLSL +
+        "void main(){"+
+          "float scroll=uTime*7.0;"+
+          "vec2 g=vec2(vUv.x*30.0, (vUv.y*40.0 - scroll));"+
+          "vec2 gw=fwidth(g);"+
+          "vec2 grid=abs(fract(g-0.5)-0.5)/max(gw,1e-4);"+
+          "float line=1.0-min(min(grid.x,grid.y),1.0);"+
+          "line=pow(line,1.4);"+
+          "float t=clamp(vFade*1.2 + vElev*0.05,0.0,1.0);"+
+          "vec3 col=mix(uMag, uCyan, t);"+
+          "col=mix(col, uCyan, clamp(vElev*0.14,0.0,0.6));"+  // tall side-terrain glows cyan
+          "float near=smoothstep(0.0,0.06,vFade);"+
+          "float far=1.0-smoothstep(0.72,0.98,vFade);"+
+          "float fade=near*far;"+
+          "float glow=line*(1.1+uBass*1.8+uHigh*0.5);"+
+          "vec3 outc=col*glow*fade*uInt*1.5;"+
+          "outc+=col*0.05*fade*(0.4+uMid*0.8);"+
+          "outc=hshift(outc,radians(uHue));"+
+          "float a=clamp(glow*fade + 0.05*fade,0.0,1.0);"+
+          "if(a<0.004) discard;"+
+          "gl_FragColor=vec4(outc,a);"+
+        "}"
+    });
+    var grid = new THREE.Mesh(new THREE.PlaneGeometry(GW, GD, WSEG, DSEG), gridMat);
+    grid.rotation.x = -Math.PI/2;   // lay flat: local z becomes world up
+    grid.position.set(0, 0, -270);  // near edge ~ camera, far edge at horizon
+    scene.add(grid);
+
+    // ================= helpers =================
+    function makeRadialTexture(){
+      var c = document.createElement('canvas'); c.width=c.height=128;
+      var x = c.getContext('2d');
+      var g = x.createRadialGradient(64,64,0,64,64,64);
+      g.addColorStop(0,'rgba(255,255,255,1)');
+      g.addColorStop(0.25,'rgba(255,255,255,0.55)');
+      g.addColorStop(1,'rgba(255,255,255,0)');
+      x.fillStyle=g; x.fillRect(0,0,128,128);
+      var t = new THREE.CanvasTexture(c); t.needsUpdate = true; return t;
+    }
+
+    // ======================= AUDIO ENGINE =======================
+    var AU = { ctx:null, analyser:null, data:null, source:null, mediaEl:null, stream:null, mode:'idle',
+               bass:0, mid:0, high:0 };
+    function ensureCtx(){
+      if(!AU.ctx){
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if(!AC) throw new Error('no-webaudio');
+        AU.ctx = new AC();
+        AU.analyser = AU.ctx.createAnalyser();
+        AU.analyser.fftSize = 2048;
+        AU.analyser.smoothingTimeConstant = 0.82;
+        AU.data = new Uint8Array(AU.analyser.frequencyBinCount);
+      }
+      if(AU.ctx.state === 'suspended') AU.ctx.resume();
+    }
+    function disconnectSource(){
+      try{ if(AU.source) AU.source.disconnect(); }catch(e){}
+      if(AU.stream){ AU.stream.getTracks().forEach(function(t){t.stop();}); AU.stream=null; }
+      if(AU.mediaEl){ try{AU.mediaEl.pause();}catch(e){} AU.mediaEl.src=''; AU.mediaEl=null; }
+      AU.source=null;
+    }
+    function useMic(){
+      try{ ensureCtx(); }catch(e){ toast('Web Audio unsupported'); return; }
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ toast('No mic API'); return; }
+      navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
+        .then(function(stream){
+          disconnectSource();
+          AU.stream = stream;
+          AU.source = AU.ctx.createMediaStreamSource(stream);
+          AU.source.connect(AU.analyser); // analyser only — no speaker feedback
+          AU.mode = 'mic'; setSrcUI('mic'); nowPlaying('live microphone'); toast('Microphone armed');
+        })
+        .catch(function(){ toast('Mic permission denied'); });
+    }
+    function usePlayFile(file){
+      try{ ensureCtx(); }catch(e){ toast('Web Audio unsupported'); return; }
+      disconnectSource();
+      var el = new window.Audio();
+      el.src = URL.createObjectURL(file);
+      el.loop = true;
+      AU.mediaEl = el;
+      try{
+        AU.source = AU.ctx.createMediaElementSource(el);
+        AU.source.connect(AU.analyser);
+        AU.analyser.connect(AU.ctx.destination); // we DO want to hear the track
+      }catch(e){ toast('Audio routing failed'); return; }
+      el.play().then(function(){
+        AU.mode='file'; setSrcUI('file'); nowPlaying(file.name.replace(/\.[^.]+$/,'')); toast('Playing '+shorten(file.name));
+      }).catch(function(){ toast('Could not decode audio'); });
+    }
+
+    function sampleAudio(){
+      if(AU.mode==='idle' || !AU.analyser){
+        var t = U.uTime.value;
+        AU.bass = 0.32 + 0.30*Math.pow(0.5+0.5*Math.sin(t*1.9),2.0) + 0.06*Math.sin(t*0.6);
+        AU.mid  = 0.28 + 0.20*(0.5+0.5*Math.sin(t*2.7+1.0));
+        AU.high = 0.20 + 0.16*(0.5+0.5*Math.sin(t*5.3+2.0));
+        return;
+      }
+      var a=AU.analyser, d=AU.data, n=d.length;
+      a.getByteFrequencyData(d);
+      var b=avg(d, 1, Math.floor(n*0.06));
+      var m=avg(d, Math.floor(n*0.06), Math.floor(n*0.25));
+      var h=avg(d, Math.floor(n*0.25), Math.floor(n*0.75));
+      AU.bass = lerp(AU.bass, Math.min(1, b/165*1.15), 0.35);
+      AU.mid  = lerp(AU.mid,  Math.min(1, m/150*1.20), 0.35);
+      AU.high = lerp(AU.high, Math.min(1, h/120*1.30), 0.45);
+    }
+    function avg(arr,s,e){ var t=0,c=0; for(var i=s;i<e;i++){t+=arr[i];c++;} return c?t/c:0; }
+    function lerp(a,b,t){ return a+(b-a)*t; }
+
+    // ======================= UI WIRING =======================
+    var btnMic=document.getElementById('btnMic'),
+        btnFile=document.getElementById('btnFile'),
+        fileInput=document.getElementById('fileInput'),
+        sInt=document.getElementById('sInt'), sHue=document.getElementById('sHue'),
+        vInt=document.getElementById('vInt'), vHue=document.getElementById('vHue'),
+        drop=document.getElementById('drop'),
+        npEl=document.getElementById('nowPlaying'),
+        mB=document.getElementById('mB'), mM=document.getElementById('mM'), mH=document.getElementById('mH'),
+        toastEl=document.getElementById('toast'),
+        hud=document.getElementById('hud');
+
+    var toastT=0;
+    function toast(txt){ toastEl.textContent='◇ '+txt; toastEl.classList.add('show'); toastT=performance.now()+2600; }
+    function nowPlaying(txt){ npEl.innerHTML='source: <b>'+esc(txt)+'</b>'; }
+    function esc(s){ return String(s).replace(/[<>&]/g,function(c){return {'<':'&lt;','>':'&gt;','&':'&amp;'}[c];}); }
+    function shorten(s){ return s.length>26 ? s.slice(0,24)+'…' : s; }
+    function setSrcUI(mode){ btnMic.classList.toggle('active', mode==='mic'); btnFile.classList.toggle('active', mode==='file'); }
+
+    btnMic.addEventListener('click', useMic);
+    btnFile.addEventListener('click', function(){ fileInput.click(); });
+    fileInput.addEventListener('change', function(e){ if(e.target.files[0]) usePlayFile(e.target.files[0]); });
+
+    sInt.addEventListener('input', function(){ var v=parseFloat(sInt.value); U.uInt.value=v; vInt.textContent=v.toFixed(2); });
+    sHue.addEventListener('input', function(){ var v=parseFloat(sHue.value); U.uHue.value=v; vHue.textContent=Math.round(v)+'°'; });
+
+    // drag & drop anywhere
+    var dragDepth=0;
+    window.addEventListener('dragenter', function(e){ e.preventDefault(); dragDepth++; drop.classList.add('show'); });
+    window.addEventListener('dragover',  function(e){ e.preventDefault(); });
+    window.addEventListener('dragleave', function(e){ e.preventDefault(); if(--dragDepth<=0){dragDepth=0;drop.classList.remove('show');} });
+    window.addEventListener('drop', function(e){
+      e.preventDefault(); dragDepth=0; drop.classList.remove('show');
+      var f=e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if(!f) return;
+      if(/audio\//.test(f.type||'') || /\.(mp3|wav|ogg|flac|m4a|aac)$/i.test(f.name)) usePlayFile(f);
+      else toast('Not an audio file');
+    });
+
+    // HUD auto-dim when idle
+    var hideT=0;
+    window.addEventListener('mousemove', function(){ hud.style.opacity=1; hideT=performance.now()+3200; });
+
+    setTimeout(function(){ toastEl.classList.add('show'); toastT=performance.now()+3400; }, 500);
+
+    // ======================= RESIZE =======================
+    function onResize(){
+      var w = window.innerWidth  || app.clientWidth  || document.documentElement.clientWidth;
+      var h = window.innerHeight || app.clientHeight || document.documentElement.clientHeight;
+      if(!w || !h) return;
+      camera.aspect=w/h; camera.updateProjectionMatrix(); renderer.setSize(w,h);
+    }
+    window.addEventListener('resize', onResize);
+    // ResizeObserver guards against hosts that size the viewport AFTER load (avoids a 0x0 canvas)
+    if(window.ResizeObserver){ try{ new ResizeObserver(onResize).observe(app); }catch(e){} }
+    onResize();
+
+    // ======================= RENDER LOOP =======================
+    var clock = new THREE.Clock();
+    var camBaseY = 4.2;
+    function frame(){
+      requestAnimationFrame(frame);
+      var dt = Math.min(clock.getDelta(), 0.05);
+      U.uTime.value += dt;
+
+      sampleAudio();
+      U.uBass.value = AU.bass; U.uMid.value = AU.mid; U.uHigh.value = AU.high;
+
+      var s = 1.0 + AU.bass*0.16; sun.scale.set(s,s,1);
+      var hs = 1.0 + AU.bass*0.5; halo.scale.set(190*hs,190*hs,1);
+      halo.material.opacity = 0.34 + AU.bass*0.38;
+
+      camera.position.y = camBaseY + AU.bass*0.5 + Math.sin(U.uTime.value*0.5)*0.15;
+      camera.position.x = Math.sin(U.uTime.value*0.13)*0.6;
+      camera.lookAt(0, 5.4 + AU.mid*0.6, -120);
+
+      mB.style.height = Math.min(100, AU.bass*115).toFixed(0)+'%';
+      mM.style.height = Math.min(100, AU.mid*115).toFixed(0)+'%';
+      mH.style.height = Math.min(100, AU.high*115).toFixed(0)+'%';
+
+      var now=performance.now();
+      if(toastT && now>toastT){ toastEl.classList.remove('show'); toastT=0; }
+      if(hideT && now>hideT){ hud.style.opacity=0.18; hideT=0; }
+
+      renderer.render(scene, camera);
+    }
+    frame();
+  }
+
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', boot);
+  else boot();
+})();
+</script>
+</body>
+</html>

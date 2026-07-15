@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>SyncSynth — Waveform Terrain</title>
+<style>
+  :root{
+    --cyan:#26f5ff;
+    --mag:#ff2fb0;
+    --ink:#05060d;
+    --glass:rgba(12,14,26,0.42);
+    --stroke:rgba(120,180,255,0.16);
+    --txt:rgba(226,236,255,0.92);
+    --dim:rgba(160,178,214,0.62);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;width:100%;overflow:hidden;background:var(--ink);}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;
+    color:var(--txt);
+    -webkit-font-smoothing:antialiased;
+    user-select:none;
+  }
+  #stage{position:fixed;inset:0;}
+  canvas{display:block;width:100%;height:100%;}
+
+  #grade{
+    position:fixed;inset:0;pointer-events:none;z-index:5;
+    background:
+      radial-gradient(120% 80% at 50% 118%, rgba(255,47,176,0.10), transparent 55%),
+      radial-gradient(140% 100% at 50% -10%, rgba(38,245,255,0.05), transparent 60%),
+      radial-gradient(100% 100% at 50% 50%, transparent 58%, rgba(0,0,0,0.55) 100%);
+  }
+
+  #hud{
+    position:fixed;left:22px;bottom:22px;z-index:20;
+    width:288px;max-width:calc(100vw - 44px);
+    padding:18px 18px 16px;
+    background:var(--glass);
+    border:1px solid var(--stroke);
+    border-radius:16px;
+    backdrop-filter:blur(18px) saturate(1.3);
+    -webkit-backdrop-filter:blur(18px) saturate(1.3);
+    box-shadow:0 24px 60px -24px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
+    transition:opacity .5s ease, transform .5s ease;
+  }
+  #hud .cap{
+    display:flex;align-items:center;gap:9px;
+    font-size:10.5px;letter-spacing:.32em;text-transform:uppercase;color:var(--dim);
+    margin-bottom:15px;
+  }
+  #hud .cap .dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--cyan);
+    box-shadow:0 0 10px var(--cyan),0 0 22px var(--cyan);
+    animation:pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:.5;transform:scale(.85)}50%{opacity:1;transform:scale(1.15)}}
+
+  .row{display:flex;gap:9px;margin-bottom:15px;}
+  .btn{
+    flex:1;position:relative;
+    padding:10px 8px;border-radius:11px;cursor:pointer;
+    font-size:11px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;
+    color:var(--dim);
+    background:rgba(255,255,255,0.02);
+    border:1px solid rgba(140,180,255,0.14);
+    transition:all .22s ease;
+    display:flex;align-items:center;justify-content:center;gap:7px;
+    overflow:hidden;
+  }
+  .btn svg{width:14px;height:14px;flex:none}
+  .btn:hover{color:var(--txt);border-color:rgba(38,245,255,0.5);background:rgba(38,245,255,0.06);}
+  .btn.on{
+    color:#001016;
+    background:linear-gradient(180deg,var(--cyan),#0bbcd6);
+    border-color:transparent;
+    box-shadow:0 0 20px -2px rgba(38,245,255,0.6);
+  }
+  .btn.on.mag{
+    color:#1a0010;
+    background:linear-gradient(180deg,var(--mag),#c81f86);
+    box-shadow:0 0 20px -2px rgba(255,47,176,0.6);
+  }
+
+  .ctl{margin-bottom:14px;}
+  .ctl:last-child{margin-bottom:2px;}
+  .ctl label{
+    display:flex;justify-content:space-between;
+    font-size:10px;letter-spacing:.24em;text-transform:uppercase;color:var(--dim);
+    margin-bottom:8px;
+  }
+  .ctl label b{color:var(--txt);font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:.08em;}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:3px;border-radius:3px;
+    background:linear-gradient(90deg,var(--cyan),var(--mag));
+    outline:none;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;width:15px;height:15px;border-radius:50%;
+    background:#eafcff;border:2px solid var(--cyan);
+    box-shadow:0 0 12px var(--cyan),0 2px 6px rgba(0,0,0,0.5);
+    transition:transform .12s ease;
+  }
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.18)}
+  input[type=range]::-moz-range-thumb{
+    width:15px;height:15px;border-radius:50%;background:#eafcff;border:2px solid var(--cyan);
+    box-shadow:0 0 12px var(--cyan);cursor:pointer;
+  }
+
+  #status{
+    margin-top:14px;padding-top:13px;border-top:1px solid rgba(140,180,255,0.1);
+    font-size:10.5px;letter-spacing:.05em;color:var(--dim);
+    display:flex;align-items:center;gap:8px;line-height:1.4;
+    min-height:16px;
+  }
+  #status .lv{
+    display:flex;gap:3px;align-items:flex-end;height:13px;margin-left:auto;flex:none;
+  }
+  #status .lv i{width:3px;background:var(--cyan);border-radius:2px;height:20%;transition:height .08s linear;box-shadow:0 0 6px var(--cyan);}
+  #status .lv i:nth-child(2){background:#7ce0ff}
+  #status .lv i:nth-child(3){background:var(--mag);box-shadow:0 0 6px var(--mag)}
+
+  #brand{
+    position:fixed;right:24px;bottom:20px;z-index:20;
+    font-size:11px;letter-spacing:.42em;text-transform:uppercase;font-weight:600;
+    color:rgba(190,205,235,0.34);
+    text-shadow:0 0 18px rgba(38,245,255,0.25);
+    pointer-events:none;
+  }
+  #brand b{color:rgba(220,235,255,0.6);font-weight:700;}
+
+  #hint{
+    position:fixed;left:50%;top:34px;transform:translateX(-50%);z-index:20;
+    font-size:11px;letter-spacing:.34em;text-transform:uppercase;color:var(--dim);
+    padding:9px 18px;border:1px solid var(--stroke);border-radius:100px;
+    background:var(--glass);backdrop-filter:blur(10px);
+    transition:opacity .8s ease;white-space:nowrap;
+  }
+  #hint.gone{opacity:0;}
+
+  #drop{
+    position:fixed;inset:16px;z-index:40;border-radius:22px;pointer-events:none;
+    border:2px dashed rgba(38,245,255,0.55);
+    background:rgba(6,10,22,0.55);backdrop-filter:blur(6px);
+    display:flex;align-items:center;justify-content:center;
+    opacity:0;transition:opacity .18s ease;
+  }
+  #drop.show{opacity:1;}
+  #drop span{font-size:14px;letter-spacing:.3em;text-transform:uppercase;color:var(--cyan);text-shadow:0 0 20px var(--cyan);}
+
+  #fallback{
+    position:fixed;inset:0;z-index:60;display:none;
+    align-items:center;justify-content:center;flex-direction:column;gap:14px;
+    text-align:center;padding:32px;
+    background:radial-gradient(120% 120% at 50% 40%,#0b1024,#03040a);
+  }
+  #fallback h1{font-size:15px;letter-spacing:.4em;text-transform:uppercase;color:var(--cyan);margin:0;font-weight:600;text-shadow:0 0 24px rgba(38,245,255,.4)}
+  #fallback p{max-width:420px;font-size:13px;line-height:1.7;color:var(--dim);margin:0}
+  #fallback .b{margin-top:6px;font-size:11px;letter-spacing:.42em;text-transform:uppercase;color:rgba(190,205,235,0.4)}
+
+  @media (max-width:560px){
+    #hud{left:12px;right:12px;bottom:12px;width:auto;}
+    #brand{right:14px;bottom:78px;font-size:10px;}
+    #hint{font-size:9.5px;letter-spacing:.24em;padding:8px 14px;}
+  }
+</style>
+</head>
+<body>
+  <div id="stage"></div>
+  <div id="grade"></div>
+
+  <div id="hint">Drop a track · enable mic · or just watch</div>
+
+  <div id="hud">
+    <div class="cap"><span class="dot"></span>Waveform Terrain</div>
+    <div class="row">
+      <div class="btn" id="micBtn" title="Use microphone">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v1a7 7 0 0 1-14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+        Mic
+      </div>
+      <div class="btn mag" id="fileBtn" title="Load an audio file">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+        Track
+      </div>
+    </div>
+
+    <div class="ctl">
+      <label>Intensity <b id="intVal">70</b></label>
+      <input type="range" id="intensity" min="0" max="100" value="70">
+    </div>
+    <div class="ctl">
+      <label>Hue <b id="hueVal">0&deg;</b></label>
+      <input type="range" id="hue" min="0" max="360" value="0">
+    </div>
+
+    <div id="status">Ambient drift · no input
+      <span class="lv"><i></i><i></i><i></i></span>
+    </div>
+  </div>
+
+  <div id="brand"><b>Sync</b>Synth</div>
+
+  <div id="drop"><span>Release to load</span></div>
+
+  <input type="file" id="fileInput" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac" style="display:none">
+
+  <div id="fallback">
+    <h1>Signal Lost</h1>
+    <p id="fbMsg">This visual needs WebGL, which isn't available in this browser or context. Try a recent version of Chrome, Edge, Firefox or Safari with hardware acceleration enabled.</p>
+    <div class="b">SyncSynth</div>
+  </div>
+
+  <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+  <script>
+  (function(){
+    "use strict";
+
+    var $ = function(id){ return document.getElementById(id); };
+    var fallbackEl = $("fallback");
+    function fail(msg){
+      if(msg){ $("fbMsg").textContent = msg; }
+      fallbackEl.style.display = "flex";
+      var h = $("hud"); if(h) h.style.display="none";
+    }
+
+    if(typeof THREE === "undefined"){
+      fail("Could not load the Three.js engine. Check your network connection and reload.");
+      return;
+    }
+
+    var COLS = 90;
+    var ROWS = 108;
+    var WIDTH = 92;
+    var DEPTH = 148;
+    var HEIGHT_SCALE = 11;
+    var ROW_SPACING = DEPTH / (ROWS - 1);
+
+    var renderer, scene, camera, clock;
+    try {
+      renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:"high-performance", stencil:false, preserveDrawingBuffer:true });
+    } catch(e){
+      fail("WebGL could not be initialised: " + (e && e.message ? e.message : e));
+      return;
+    }
+    var DPR = Math.min(window.devicePixelRatio || 1, 1.5);
+    renderer.setPixelRatio(DPR);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setClearColor(0x03040a, 1);
+    $("stage").appendChild(renderer.domElement);
+
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.5, 900);
+    camera.position.set(0, 13, 54);
+    clock = new THREE.Clock();
+
+    var HUE = [
+      "vec3 hueShift(vec3 col, float h){",
+      "  const vec3 k = vec3(0.57735026);",
+      "  float c = cos(h); float s = sin(h);",
+      "  return col*c + cross(k,col)*s + k*dot(k,col)*(1.0-c);",
+      "}"
+    ].join("\n");
+
+    var U = {
+      uTime:      { value: 0 },
+      uHue:       { value: 0 },
+      uIntensity: { value: 0.7 },
+      uFog:       { value: 0.013 },
+      uMax:       { value: HEIGHT_SCALE },
+      uBass:      { value: 0 },
+      uMid:       { value: 0 },
+      uHigh:      { value: 0 }
+    };
+
+    var vCount = COLS * ROWS;
+    var positions = new Float32Array(vCount * 3);
+    for(var r=0;r<ROWS;r++){
+      for(var c=0;c<COLS;c++){
+        var i = (r*COLS + c) * 3;
+        positions[i]   = (c/(COLS-1) - 0.5) * WIDTH;
+        positions[i+1] = 0;
+        positions[i+2] = (r/(ROWS-1) - 0.5) * DEPTH;
+      }
+    }
+    var indices = [];
+    for(var r2=0;r2<ROWS-1;r2++){
+      for(var c2=0;c2<COLS-1;c2++){
+        var a = r2*COLS + c2, b = a+1, cc = a+COLS, d = cc+1;
+        indices.push(a,cc,b, b,cc,d);
+      }
+    }
+    var terrainGeo = new THREE.BufferGeometry();
+    terrainGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+    terrainGeo.setIndex(indices);
+
+    var terrainMat = new THREE.ShaderMaterial({
+      uniforms: U,
+      extensions: { derivatives: true },
+      vertexShader: [
+        "uniform float uTime; uniform float uIntensity;",
+        "varying float vH; varying vec2 vW; varying float vD;",
+        "void main(){",
+        "  vec3 p = position;",
+        "  float ripple = sin(p.x*0.16 + uTime*0.9) * cos(p.z*0.12 - uTime*0.6);",
+        "  p.y += ripple * 0.5 * uIntensity;",
+        "  vH = p.y;",
+        "  vec4 world = modelMatrix * vec4(p,1.0);",
+        "  vW = world.xz;",
+        "  vec4 mv = viewMatrix * world;",
+        "  vD = -mv.z;",
+        "  gl_Position = projectionMatrix * mv;",
+        "}"
+      ].join("\n"),
+      fragmentShader: [
+        HUE,
+        "uniform float uHue; uniform float uIntensity; uniform float uFog; uniform float uMax; uniform float uHigh;",
+        "varying float vH; varying vec2 vW; varying float vD;",
+        "void main(){",
+        "  float hN = clamp(vH/uMax, -0.25, 1.25);",
+        "  vec3 low = vec3(0.035,0.02,0.11);",
+        "  vec3 mid = vec3(0.52,0.05,0.55);",
+        "  vec3 hi  = vec3(0.10,0.85,1.0);",
+        "  vec3 base = mix(low, mid, smoothstep(0.0,0.42,hN));",
+        "  base = mix(base, hi, smoothstep(0.42,1.0,hN));",
+        "  vec2 g = vW / 4.0;",
+        "  vec2 gr = abs(fract(g-0.5)-0.5) / fwidth(g);",
+        "  float line = 1.0 - min(min(gr.x, gr.y), 1.0);",
+        "  vec3 lineCol = mix(vec3(0.0,0.92,1.0), vec3(1.0,0.16,0.6), smoothstep(0.0,1.0,hN));",
+        "  base += lineCol * line * (0.55 + 0.9*uIntensity + 0.5*uHigh);",
+        "  base += hi * smoothstep(0.72,1.15,hN) * 0.9;",
+        "  base = hueShift(base, uHue);",
+        "  float fog = 1.0 - exp(-uFog*uFog*vD*vD);",
+        "  fog = clamp(fog,0.0,1.0);",
+        "  vec3 horizon = hueShift(vec3(0.14,0.03,0.22), uHue);",
+        "  vec3 col = mix(base, horizon, fog);",
+        "  gl_FragColor = vec4(col, 1.0);",
+        "}"
+      ].join("\n")
+    });
+    var terrain = new THREE.Mesh(terrainGeo, terrainMat);
+    var terrainGroup = new THREE.Group();
+    terrainGroup.add(terrain);
+    scene.add(terrainGroup);
+
+    var skyGeo = new THREE.PlaneGeometry(WIDTH*3.4, DEPTH*1.5, 1, 1);
+    skyGeo.rotateX(Math.PI/2);
+    var skyMat = new THREE.ShaderMaterial({
+      uniforms: U,
+      transparent: true, depthWrite:false, blending: THREE.AdditiveBlending,
+      extensions:{ derivatives:true },
+      vertexShader:[
+        "varying vec2 vW; varying float vD;",
+        "void main(){",
+        "  vec4 world = modelMatrix * vec4(position,1.0);",
+        "  vW = world.xz;",
+        "  vec4 mv = viewMatrix * world;",
+        "  vD = -mv.z;",
+        "  gl_Position = projectionMatrix * mv;",
+        "}"
+      ].join("\n"),
+      fragmentShader:[
+        HUE,
+        "uniform float uTime; uniform float uHue; uniform float uFog; uniform float uIntensity; uniform float uMid;",
+        "varying vec2 vW; varying float vD;",
+        "void main(){",
+        "  vec2 g = vec2(vW.x, vW.y + uTime*6.0) / 4.0;",
+        "  vec2 gr = abs(fract(g-0.5)-0.5) / fwidth(g);",
+        "  float line = 1.0 - min(min(gr.x, gr.y), 1.0);",
+        "  float fog = clamp(1.0 - exp(-uFog*uFog*vD*vD), 0.0, 1.0);",
+        "  vec3 col = hueShift(vec3(0.1,0.8,1.0), uHue);",
+        "  float a = line * (1.0-fog) * (0.20 + 0.4*uIntensity + 0.35*uMid);",
+        "  gl_FragColor = vec4(col*a, a);",
+        "}"
+      ].join("\n")
+    });
+    var sky = new THREE.Mesh(skyGeo, skyMat);
+    sky.position.y = 46;
+    scene.add(sky);
+
+    var domeGeo = new THREE.SphereGeometry(420, 32, 20);
+    var domeMat = new THREE.ShaderMaterial({
+      uniforms: U,
+      side: THREE.BackSide, depthWrite:false, depthTest:false, fog:false,
+      vertexShader:[
+        "varying vec3 vDir;",
+        "void main(){ vDir = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }"
+      ].join("\n"),
+      fragmentShader:[
+        HUE,
+        "uniform float uHue;",
+        "varying vec3 vDir;",
+        "void main(){",
+        "  float t = clamp(vDir.y*0.5+0.5, 0.0, 1.0);",
+        "  vec3 top = hueShift(vec3(0.015,0.02,0.06), uHue);",
+        "  vec3 horizon = hueShift(vec3(0.22,0.04,0.28), uHue);",
+        "  vec3 col = mix(horizon, top, smoothstep(0.34,0.78,t));",
+        "  col += hueShift(vec3(0.35,0.06,0.42), uHue) * pow(max(1.0-abs(vDir.y),0.0), 7.0) * 0.7;",
+        "  gl_FragColor = vec4(col, 1.0);",
+        "}"
+      ].join("\n")
+    });
+    var dome = new THREE.Mesh(domeGeo, domeMat);
+    dome.renderOrder = -10;
+    scene.add(dome);
+
+    var sunGeo = new THREE.PlaneGeometry(130, 130, 1, 1);
+    var sunMat = new THREE.ShaderMaterial({
+      uniforms: U,
+      transparent:true, depthWrite:false, depthTest:true, blending:THREE.AdditiveBlending, fog:false,
+      vertexShader:[
+        "varying vec2 vUv;",
+        "void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }"
+      ].join("\n"),
+      fragmentShader:[
+        HUE,
+        "uniform float uHue; uniform float uBass;",
+        "varying vec2 vUv;",
+        "void main(){",
+        "  float d = length(vUv-0.5)*2.0;",
+        "  float core = smoothstep(1.0,0.0,d);",
+        "  vec3 col = hueShift(vec3(1.0,0.42,0.72), uHue);",
+        "  float a = pow(core,2.2) * (0.42 + uBass*0.75);",
+        "  gl_FragColor = vec4(col*a, a);",
+        "}"
+      ].join("\n")
+    });
+    var sun = new THREE.Mesh(sunGeo, sunMat);
+    sun.position.set(0, 20, -300);
+    sun.renderOrder = -9;
+    scene.add(sun);
+
+    var STAR_N = 850;
+    var starPos = new Float32Array(STAR_N*3);
+    var starPhase = new Float32Array(STAR_N);
+    for(var st=0;st<STAR_N;st++){
+      var ang = Math.random()*Math.PI*2;
+      var rad = 140 + Math.random()*230;
+      starPos[st*3]   = Math.cos(ang)*rad;
+      starPos[st*3+1] = 40 + Math.random()*230;
+      starPos[st*3+2] = -60 - Math.random()*330;
+      starPhase[st]   = Math.random();
+    }
+    var starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute("position", new THREE.BufferAttribute(starPos,3));
+    starGeo.setAttribute("aPhase", new THREE.BufferAttribute(starPhase,1));
+    var starMat = new THREE.ShaderMaterial({
+      uniforms: U,
+      transparent:true, depthWrite:false, blending:THREE.AdditiveBlending,
+      vertexShader:[
+        "attribute float aPhase; varying float vP; uniform float uTime;",
+        "void main(){",
+        "  vP = aPhase;",
+        "  vec4 mv = modelViewMatrix * vec4(position,1.0);",
+        "  gl_PointSize = (1.6 + 2.6*aPhase) * (320.0 / max(-mv.z, 1.0));",
+        "  gl_Position = projectionMatrix * mv;",
+        "}"
+      ].join("\n"),
+      fragmentShader:[
+        "uniform float uTime; varying float vP;",
+        "void main(){",
+        "  vec2 c = gl_PointCoord - 0.5;",
+        "  float d = length(c);",
+        "  if(d>0.5) discard;",
+        "  float soft = smoothstep(0.5,0.0,d);",
+        "  float tw = 0.55 + 0.45*sin(uTime*2.2 + vP*6.283);",
+        "  vec3 col = vec3(0.68,0.82,1.0);",
+        "  gl_FragColor = vec4(col*soft*tw, soft*tw);",
+        "}"
+      ].join("\n")
+    });
+    var stars = new THREE.Points(starGeo, starMat);
+    scene.add(stars);
+
+    var useBloom = true;
+    var rtScene, rtA, rtB, quadScene, quadCam, quad;
+    var brightMat, blurMat, compMat;
+    var bloomW, bloomH, fullW, fullH;
+
+    function makeRT(w,h,depth){
+      return new THREE.WebGLRenderTarget(w, h, {
+        minFilter: THREE.LinearFilter,
+        magFilter: THREE.LinearFilter,
+        format: THREE.RGBAFormat,
+        type: THREE.UnsignedByteType,
+        depthBuffer: !!depth,
+        stencilBuffer: false
+      });
+    }
+
+    try {
+      var buf = new THREE.Vector2();
+      renderer.getDrawingBufferSize(buf);
+      fullW = Math.max(2, Math.floor(buf.x));
+      fullH = Math.max(2, Math.floor(buf.y));
+      bloomW = Math.max(2, Math.floor(fullW/2));
+      bloomH = Math.max(2, Math.floor(fullH/2));
+
+      rtScene = makeRT(fullW, fullH, true);
+      rtA = makeRT(bloomW, bloomH, false);
+      rtB = makeRT(bloomW, bloomH, false);
+
+      quadScene = new THREE.Scene();
+      quadCam = new THREE.OrthographicCamera(-1,1,1,-1,0,1);
+      var quadGeo = new THREE.PlaneGeometry(2,2);
+
+      var fsVert = [
+        "varying vec2 vUv;",
+        "void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }"
+      ].join("\n");
+
+      brightMat = new THREE.ShaderMaterial({
+        uniforms:{ tDiffuse:{value:null}, uThreshold:{value:0.62} },
+        vertexShader: fsVert,
+        fragmentShader:[
+          "uniform sampler2D tDiffuse; uniform float uThreshold; varying vec2 vUv;",
+          "void main(){",
+          "  vec3 c = texture2D(tDiffuse, vUv).rgb;",
+          "  float l = dot(c, vec3(0.299,0.587,0.114));",
+          "  float k = smoothstep(uThreshold, uThreshold+0.28, l);",
+          "  gl_FragColor = vec4(c*k, 1.0);",
+          "}"
+        ].join("\n")
+      });
+
+      blurMat = new THREE.ShaderMaterial({
+        uniforms:{ tDiffuse:{value:null}, uDir:{value:new THREE.Vector2(1,0)}, uRes:{value:new THREE.Vector2(bloomW,bloomH)} },
+        vertexShader: fsVert,
+        fragmentShader:[
+          "uniform sampler2D tDiffuse; uniform vec2 uDir; uniform vec2 uRes; varying vec2 vUv;",
+          "void main(){",
+          "  vec2 px = uDir / uRes;",
+          "  vec3 s = texture2D(tDiffuse, vUv).rgb * 0.2270270;",
+          "  s += texture2D(tDiffuse, vUv + px*1.3846153).rgb * 0.3162162;",
+          "  s += texture2D(tDiffuse, vUv - px*1.3846153).rgb * 0.3162162;",
+          "  s += texture2D(tDiffuse, vUv + px*3.2307692).rgb * 0.0702702;",
+          "  s += texture2D(tDiffuse, vUv - px*3.2307692).rgb * 0.0702702;",
+          "  gl_FragColor = vec4(s, 1.0);",
+          "}"
+        ].join("\n")
+      });
+
+      compMat = new THREE.ShaderMaterial({
+        uniforms:{
+          tScene:{value:null}, tBloom:{value:null},
+          uBloom:{value:1.25}, uRes:{value:new THREE.Vector2(fullW,fullH)}, uTime:{value:0}
+        },
+        vertexShader: fsVert,
+        fragmentShader:[
+          "uniform sampler2D tScene; uniform sampler2D tBloom; uniform float uBloom; uniform vec2 uRes; uniform float uTime;",
+          "varying vec2 vUv;",
+          "void main(){",
+          "  vec3 scene = texture2D(tScene, vUv).rgb;",
+          "  vec3 bloom = texture2D(tBloom, vUv).rgb;",
+          "  vec3 col = scene + bloom * uBloom;",
+          "  vec2 q = vUv - 0.5;",
+          "  float vig = smoothstep(0.92, 0.32, length(q));",
+          "  col *= mix(0.55, 1.0, vig);",
+          "  float scan = 0.97 + 0.03*sin(vUv.y*uRes.y*1.4);",
+          "  col *= scan;",
+          "  float g = fract(sin(dot(vUv*(uTime+1.0), vec2(12.9898,78.233)))*43758.5453);",
+          "  col += (g-0.5)*0.022;",
+          "  col = vec3(1.0) - exp(-col*1.15);",
+          "  gl_FragColor = vec4(col, 1.0);",
+          "}"
+        ].join("\n")
+      });
+
+      quad = new THREE.Mesh(quadGeo, brightMat);
+      quadScene.add(quad);
+    } catch(err){
+      useBloom = false;
+    }
+
+    function resizePost(){
+      if(!useBloom) return;
+      var buf2 = new THREE.Vector2();
+      renderer.getDrawingBufferSize(buf2);
+      fullW = Math.max(2, Math.floor(buf2.x));
+      fullH = Math.max(2, Math.floor(buf2.y));
+      bloomW = Math.max(2, Math.floor(fullW/2));
+      bloomH = Math.max(2, Math.floor(fullH/2));
+      rtScene.setSize(fullW, fullH);
+      rtA.setSize(bloomW, bloomH);
+      rtB.setSize(bloomW, bloomH);
+      blurMat.uniforms.uRes.value.set(bloomW, bloomH);
+      compMat.uniforms.uRes.value.set(fullW, fullH);
+    }
+
+    function renderPass(mat, target){
+      quad.material = mat;
+      renderer.setRenderTarget(target);
+      renderer.render(quadScene, quadCam);
+    }
+
+    var audioCtx=null, analyser=null, freqData=null, srcNode=null, mediaEl=null, usableBins=0;
+    var audioActive=false, audioMode="";
+    var statusEl = $("status");
+    var lvBars = statusEl.querySelectorAll(".lv i");
+
+    function setStatus(txt){ statusEl.childNodes[0].nodeValue = txt + " "; }
+
+    function ensureCtx(){
+      if(!audioCtx){
+        var AC = window.AudioContext || window.webkitAudioContext;
+        if(!AC) throw new Error("Web Audio API unavailable");
+        audioCtx = new AC();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        analyser.smoothingTimeConstant = 0.78;
+        freqData = new Uint8Array(analyser.frequencyBinCount);
+        var nyquist = audioCtx.sampleRate/2;
+        usableBins = Math.min(analyser.frequencyBinCount, Math.floor((8000/nyquist)*analyser.frequencyBinCount));
+        usableBins = Math.max(usableBins, 32);
+      }
+      if(audioCtx.state === "suspended") audioCtx.resume();
+    }
+
+    function disconnectSource(){
+      try { if(srcNode) srcNode.disconnect(); } catch(e){}
+      srcNode = null;
+      if(mediaEl){ try{ mediaEl.pause(); }catch(e){} }
+    }
+
+    function startMic(){
+      ensureCtx();
+      if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+        setStatus("Mic not supported here"); return;
+      }
+      setStatus("Requesting mic…");
+      navigator.mediaDevices.getUserMedia({ audio:{ echoCancellation:false, noiseSuppression:false, autoGainControl:false } })
+      .then(function(stream){
+        disconnectSource();
+        if(mediaEl){ mediaEl = null; }
+        srcNode = audioCtx.createMediaStreamSource(stream);
+        srcNode.connect(analyser);
+        audioActive = true; audioMode="mic";
+        setStatus("Live microphone");
+        micBtn.classList.add("on"); fileBtn.classList.remove("on");
+        dismissHint();
+      })
+      .catch(function(e){
+        setStatus("Mic blocked · " + (e && e.name ? e.name : "denied"));
+        micBtn.classList.remove("on");
+      });
+    }
+
+    function loadFile(file){
+      try { ensureCtx(); } catch(e){ setStatus("Audio engine failed"); return; }
+      var url = URL.createObjectURL(file);
+      if(!mediaEl){
+        mediaEl = new Audio();
+        mediaEl.loop = true;
+        mediaEl.crossOrigin = "anonymous";
+      }
+      disconnectSource();
+      mediaEl.src = url;
+      if(!mediaEl._wired){
+        try {
+          var mnode = audioCtx.createMediaElementSource(mediaEl);
+          mnode.connect(analyser);
+          analyser.connect(audioCtx.destination);
+          mediaEl._srcNode = mnode;
+          mediaEl._wired = true;
+        } catch(e){ setStatus("File decode failed"); return; }
+      }
+      srcNode = mediaEl._srcNode;
+      var name = file.name.length>26 ? file.name.slice(0,24)+"…" : file.name;
+      mediaEl.play().then(function(){
+        audioActive = true; audioMode="file";
+        setStatus("▶ " + name);
+        fileBtn.classList.add("on"); micBtn.classList.remove("on");
+        dismissHint();
+      }).catch(function(){
+        setStatus("Tap Track again to play");
+      });
+    }
+
+    var smBass=0, smMid=0, smHigh=0;
+    var bassLo, bassHi, midLo, midHi, highLo, highHi;
+    function computeBandRanges(){
+      var nyq = audioCtx.sampleRate/2;
+      var bins = analyser.frequencyBinCount;
+      function bin(f){ return Math.max(1, Math.min(bins-1, Math.round(f/nyq*bins))); }
+      bassLo=bin(20); bassHi=bin(200);
+      midLo=bin(200); midHi=bin(1600);
+      highLo=bin(1600); highHi=bin(7000);
+    }
+    function bandAvg(lo,hi){
+      var sum=0,n=0;
+      for(var i=lo;i<=hi;i++){ sum+=freqData[i]; n++; }
+      return n? (sum/n)/255 : 0;
+    }
+
+    function sampleAudio(t){
+      var bass, mid, high;
+      if(audioActive && analyser){
+        if(bassHi===undefined) computeBandRanges();
+        analyser.getByteFrequencyData(freqData);
+        bass = Math.pow(bandAvg(bassLo,bassHi), 1.1) * 1.35;
+        mid  = Math.pow(bandAvg(midLo,midHi), 1.05) * 1.5;
+        high = Math.pow(bandAvg(highLo,highHi), 0.95) * 2.1;
+      } else {
+        bass = 0.34 + 0.30*Math.abs(Math.sin(t*0.9)) + 0.12*Math.sin(t*2.7);
+        mid  = 0.30 + 0.24*Math.abs(Math.sin(t*1.3 + 1.0));
+        high = 0.24 + 0.20*Math.abs(Math.sin(t*2.1 + 2.0));
+      }
+      bass=Math.min(bass,1.4); mid=Math.min(mid,1.4); high=Math.min(high,1.4);
+      smBass += (bass - smBass) * (bass>smBass?0.5:0.14);
+      smMid  += (mid  - smMid ) * (mid>smMid?0.45:0.13);
+      smHigh += (high - smHigh) * (high>smHigh?0.5:0.16);
+    }
+
+    var rowTmp = new Float32Array(COLS);
+    function buildRow(t){
+      var intensity = U.uIntensity.value;
+      for(var c=0;c<COLS;c++){
+        var cn = c/(COLS-1);
+        var m = Math.abs(cn-0.5)*2.0;
+        var val;
+        if(audioActive && analyser){
+          var frac = m;
+          var bin = 1 + Math.floor(frac*frac*(usableBins-1));
+          val = freqData[bin]/255;
+          val = Math.pow(val, 0.9);
+        } else {
+          var w = Math.sin(cn*9.0 + t*1.25) * Math.sin(cn*3.3 - t*0.7);
+          val = Math.abs(w) * (0.45 + 0.55*Math.abs(Math.sin(t*0.5 + cn*6.0)));
+        }
+        var win = smoothstep(0.0,0.09,cn) * smoothstep(1.0,0.91,cn);
+        var drive = 0.42 + 0.9*smBass*(m<0.4?1.0:0.4) + 0.5*smMid + 0.3*val;
+        var h = val * HEIGHT_SCALE * win * intensity * drive;
+        h += (Math.random()-0.5) * 0.35 * win;
+        rowTmp[c] = h;
+      }
+    }
+    function smoothstep(a,b,x){
+      var t = Math.max(0, Math.min(1, (x-a)/(b-a)));
+      return t*t*(3-2*t);
+    }
+
+    function advanceTerrain(t){
+      buildRow(t);
+      var pos = positions;
+      for(var r=ROWS-1;r>=1;r--){
+        var dst = r*COLS*3 + 1;
+        var srcp = (r-1)*COLS*3 + 1;
+        for(var c=0;c<COLS;c++){
+          pos[dst + c*3] = pos[srcp + c*3];
+        }
+      }
+      for(var c2=0;c2<COLS;c2++){
+        pos[c2*3 + 1] = rowTmp[c2];
+      }
+      terrainGeo.attributes.position.needsUpdate = true;
+    }
+
+    var micBtn=$("micBtn"), fileBtn=$("fileBtn"), fileInput=$("fileInput");
+    var hintEl=$("hint"), hintDone=false;
+    function dismissHint(){ if(!hintDone){ hintDone=true; hintEl.classList.add("gone"); setTimeout(function(){ hintEl.style.display="none"; },900); } }
+
+    micBtn.addEventListener("click", function(){ try{ startMic(); }catch(e){ setStatus("Audio unavailable"); } });
+    fileBtn.addEventListener("click", function(){ fileInput.click(); });
+    fileInput.addEventListener("change", function(e){ if(e.target.files && e.target.files[0]) loadFile(e.target.files[0]); });
+
+    var intEl=$("intensity"), hueEl=$("hue"), intVal=$("intVal"), hueVal=$("hueVal");
+    intEl.addEventListener("input", function(){ intVal.textContent = intEl.value; });
+    hueEl.addEventListener("input", function(){ hueVal.innerHTML = hueEl.value + "&deg;"; });
+
+    var dropEl=$("drop"), dragDepth=0;
+    window.addEventListener("dragenter", function(e){ e.preventDefault(); dragDepth++; dropEl.classList.add("show"); });
+    window.addEventListener("dragover", function(e){ e.preventDefault(); e.dataTransfer.dropEffect="copy"; });
+    window.addEventListener("dragleave", function(e){ e.preventDefault(); dragDepth--; if(dragDepth<=0){ dragDepth=0; dropEl.classList.remove("show"); } });
+    window.addEventListener("drop", function(e){
+      e.preventDefault(); dragDepth=0; dropEl.classList.remove("show");
+      var f = e.dataTransfer.files && e.dataTransfer.files[0];
+      if(f && (/audio|\.(mp3|wav|ogg|m4a|flac|aac)$/i).test(f.type + f.name)) loadFile(f);
+      else if(f) setStatus("Not an audio file");
+    });
+
+    function onResize(){
+      var w = window.innerWidth, h = window.innerHeight;
+      renderer.setSize(w, h);
+      camera.aspect = w/h;
+      camera.updateProjectionMatrix();
+      resizePost();
+    }
+    window.addEventListener("resize", onResize);
+
+    var baseFov = 60;
+    var brokeCount = 0;
+
+    function frame(){
+      requestAnimationFrame(frame);
+      var dt = Math.min(clock.getDelta(), 0.05);
+      var t = clock.elapsedTime;
+
+      try {
+        sampleAudio(t);
+
+        var level = (smBass + smMid + smHigh) / 3;
+        U.uTime.value = t;
+        U.uHue.value = (parseFloat(hueEl.value)||0) * Math.PI/180;
+        U.uIntensity.value = ((parseFloat(intEl.value)||0)/100) * (0.55 + 0.7*level);
+        U.uBass.value = smBass; U.uMid.value = smMid; U.uHigh.value = smHigh;
+
+        var speed = (9 + smBass*20) * (0.5 + (parseFloat(intEl.value)||0)/100);
+        terrainGroup.position.z += speed * dt;
+        while(terrainGroup.position.z >= ROW_SPACING){
+          terrainGroup.position.z -= ROW_SPACING;
+          advanceTerrain(t);
+        }
+
+        var ss = 1.0 + smBass*0.35;
+        sun.scale.set(ss, ss, 1);
+
+        camera.position.x = Math.sin(t*0.14)*4.5;
+        camera.position.y = 12.5 + Math.sin(t*0.42)*1.4 + smHigh*2.6;
+        camera.fov = baseFov + smBass*5.0;
+        camera.updateProjectionMatrix();
+        camera.lookAt(0, 5.0 + smBass*2.2, -34);
+
+        lvBars[0].style.height = (14 + smBass*86) + "%";
+        lvBars[1].style.height = (14 + smMid*86) + "%";
+        lvBars[2].style.height = (14 + smHigh*86) + "%";
+
+        if(useBloom){
+          renderer.setRenderTarget(rtScene);
+          renderer.clear();
+          renderer.render(scene, camera);
+
+          brightMat.uniforms.tDiffuse.value = rtScene.texture;
+          renderPass(brightMat, rtA);
+
+          blurMat.uniforms.tDiffuse.value = rtA.texture;
+          blurMat.uniforms.uDir.value.set(1,0);
+          renderPass(blurMat, rtB);
+
+          blurMat.uniforms.tDiffuse.value = rtB.texture;
+          blurMat.uniforms.uDir.value.set(0,1);
+          renderPass(blurMat, rtA);
+
+          compMat.uniforms.tScene.value = rtScene.texture;
+          compMat.uniforms.tBloom.value = rtA.texture;
+          compMat.uniforms.uTime.value = t;
+          quad.material = compMat;
+          renderer.setRenderTarget(null);
+          renderer.render(quadScene, quadCam);
+        } else {
+          renderer.setRenderTarget(null);
+          renderer.render(scene, camera);
+        }
+      } catch(loopErr){
+        brokeCount++;
+        if(brokeCount > 8){
+          fail("The visual engine hit a rendering error and stopped. " + (loopErr && loopErr.message ? loopErr.message : ""));
+        }
+      }
+    }
+
+    for(var pfill=0; pfill<ROWS; pfill++){ advanceTerrain(pfill*0.05); }
+
+    onResize();
+    frame();
+
+  })();
+  </script>
+</body>
+</html>

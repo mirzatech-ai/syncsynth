@@ -1,0 +1,41 @@
+{
+  "scores": [
+    {
+      "filename": "syncsynth-cyber-tunnel.html",
+      "code_quality": 9,
+      "fps_discipline": 10,
+      "visual_concept": 9,
+      "total": 28,
+      "verdict": "Best-engineered of the set: 3 draw calls, instanced rings + in-place point buffer + modular recycling, HDR white-hot cores via ACES fake-bloom (no RT cost) \u2014 bulletproof 60fps and genuinely hypnotic."
+    },
+    {
+      "filename": "syncsynth-synthwave-grid.html",
+      "code_quality": 9,
+      "fps_discipline": 10,
+      "visual_concept": 8,
+      "total": 27,
+      "verdict": "Rock-solid and alloc-free \u2014 one static plane scrolled in-shader, ~5 draw calls, DPR/delta clamped, clean audio wiring; the canonical synthwave look is flawless but the most expected/safe concept."
+    },
+    {
+      "filename": "liquid-metal-orb.html",
+      "code_quality": 9,
+      "fps_discipline": 7,
+      "visual_concept": 10,
+      "total": 26,
+      "verdict": "The premium showpiece \u2014 liquid-chrome iridescence, analytic normals, hand-rolled half-res bloom + ACES/CA/grain \u2014 but 9 snoise taps/vertex plus a 5-pass HDR-MSAA chain is the real 60fps risk on integrated GPUs; RedFormat DataTexture is a minor WebGL1 edge case."
+    },
+    {
+      "filename": "syncsynth-neon-particle-swarm.html",
+      "code_quality": 8,
+      "fps_discipline": 9,
+      "visual_concept": 7,
+      "total": 24,
+      "verdict": "Clean single-draw 30k GPU swarm, frame-rate-independent smoothing, zero hot-loop allocs; heavy additive fill is bounded and safe, but a lone breathing sphere reads simpler/less compositionally rich than the others (also ships as an HTML fragment, not a full doc)."
+    }
+  ],
+  "best_two": [
+    "syncsynth-cyber-tunnel.html",
+    "syncsynth-synthwave-grid.html"
+  ],
+  "summary": "All four compile clean, cap DPR, clamp delta, wire the analyser correctly (mic = analysis-only, file = tap + destination), and run allocation-free hot loops \u2014 no crash risks, no cheap-looking output. Cyber-tunnel and synthwave-grid are the two to ship: both hold 60fps with near-zero margin (3-5 draw calls, instanced/static geometry, fake-bloom via tonemapping instead of render targets) while looking expensive and on-brand. Liquid-metal-orb is the strongest visual by a clear margin and the most sophisticated code, but its 9-simplex-taps-per-vertex displacement plus a full half-res bloom+MSAA-HDR pipeline is the one module with a real risk of dipping under 60fps on integrated GPUs, so it loses the top slot on fps discipline. Neon-particle-swarm is solid but the least visually differentiated (one breathing sphere) and ships as a bare HTML fragment."
+}

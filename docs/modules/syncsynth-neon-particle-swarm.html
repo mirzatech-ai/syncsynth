@@ -1,0 +1,549 @@
+<title>SyncSynth — Neon Particle Swarm</title>
+<style>
+  :root{
+    --void:#04050b;
+    --panel:rgba(10,14,26,0.55);
+    --panel-edge:rgba(120,190,255,0.18);
+    --neon-a:#38f0ff;
+    --neon-b:#ff4fd8;
+    --text:#cfe4ff;
+    --text-dim:rgba(180,205,240,0.55);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%;width:100%;overflow:hidden;background:var(--void)}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Helvetica,Arial,sans-serif;
+    color:var(--text);
+    -webkit-font-smoothing:antialiased;
+    background:
+      radial-gradient(120% 90% at 50% 42%, #0a1024 0%, #05060e 55%, #020309 100%);
+  }
+  canvas{display:block;position:fixed;inset:0;z-index:0}
+
+  #hud{
+    position:fixed;z-index:10;
+    left:22px;bottom:22px;
+    width:288px;max-width:calc(100vw - 44px);
+    padding:18px 18px 16px;
+    background:var(--panel);
+    border:1px solid var(--panel-edge);
+    border-radius:16px;
+    backdrop-filter:blur(18px) saturate(140%);
+    -webkit-backdrop-filter:blur(18px) saturate(140%);
+    box-shadow:0 20px 60px -20px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.05);
+    user-select:none;
+    transition:opacity .4s ease, transform .4s ease;
+  }
+  #hud .title{
+    font-size:11px;letter-spacing:.32em;text-transform:uppercase;
+    color:var(--text-dim);margin-bottom:14px;font-weight:600;
+    display:flex;align-items:center;gap:8px;
+  }
+  #hud .title .dot{
+    width:7px;height:7px;border-radius:50%;
+    background:var(--neon-a);
+    box-shadow:0 0 10px var(--neon-a),0 0 20px var(--neon-a);
+    animation:pulse 2.4s ease-in-out infinite;
+  }
+  @keyframes pulse{0%,100%{opacity:.4;transform:scale(.8)}50%{opacity:1;transform:scale(1.15)}}
+
+  .row{display:flex;gap:9px;margin-bottom:14px}
+  button.src{
+    flex:1;position:relative;
+    padding:11px 8px;
+    font-size:11.5px;font-weight:600;letter-spacing:.06em;
+    color:var(--text);
+    background:linear-gradient(180deg,rgba(56,240,255,0.10),rgba(56,240,255,0.02));
+    border:1px solid rgba(56,240,255,0.30);
+    border-radius:11px;cursor:pointer;
+    transition:all .2s ease;
+    overflow:hidden;
+  }
+  button.src.alt{
+    background:linear-gradient(180deg,rgba(255,79,216,0.10),rgba(255,79,216,0.02));
+    border-color:rgba(255,79,216,0.30);
+  }
+  button.src:hover{transform:translateY(-1px);box-shadow:0 6px 22px -8px rgba(56,240,255,0.6)}
+  button.src.alt:hover{box-shadow:0 6px 22px -8px rgba(255,79,216,0.6)}
+  button.src:active{transform:translateY(0)}
+  button.src.active{
+    color:#02040a;
+    background:linear-gradient(180deg,var(--neon-a),#0bd4e6);
+    border-color:transparent;
+    box-shadow:0 0 24px -4px var(--neon-a);
+  }
+  button.src.alt.active{
+    background:linear-gradient(180deg,var(--neon-b),#e02fbb);
+    box-shadow:0 0 24px -4px var(--neon-b);
+  }
+
+  .ctrl{margin-bottom:13px}
+  .ctrl:last-of-type{margin-bottom:2px}
+  .ctrl label{
+    display:flex;justify-content:space-between;
+    font-size:10px;letter-spacing:.18em;text-transform:uppercase;
+    color:var(--text-dim);margin-bottom:8px;
+  }
+  .ctrl label span{color:var(--text);font-variant-numeric:tabular-nums}
+
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;
+    width:100%;height:4px;border-radius:4px;cursor:pointer;
+    background:linear-gradient(90deg,var(--neon-a),var(--neon-b));
+    outline:none;
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;
+    width:15px;height:15px;border-radius:50%;
+    background:#eaf6ff;border:2px solid rgba(255,255,255,0.9);
+    box-shadow:0 0 12px 1px var(--neon-a),0 2px 6px rgba(0,0,0,.6);
+    transition:transform .15s ease;
+  }
+  input[type=range]::-webkit-slider-thumb:hover{transform:scale(1.2)}
+  input[type=range]::-moz-range-thumb{
+    width:15px;height:15px;border-radius:50%;
+    background:#eaf6ff;border:2px solid rgba(255,255,255,0.9);
+    box-shadow:0 0 12px 1px var(--neon-a);cursor:pointer;
+  }
+  input[type=range]::-moz-range-track{background:transparent}
+
+  #status{
+    margin-top:14px;padding-top:12px;
+    border-top:1px solid rgba(255,255,255,0.06);
+    font-size:10.5px;letter-spacing:.04em;color:var(--text-dim);
+    min-height:14px;line-height:1.4;
+  }
+  #status b{color:var(--neon-a);font-weight:600}
+
+  #footer{
+    position:fixed;z-index:10;right:22px;bottom:20px;
+    font-size:11px;letter-spacing:.42em;text-transform:uppercase;
+    color:rgba(150,180,220,0.35);font-weight:500;
+    pointer-events:none;user-select:none;
+  }
+
+  #dropHint{
+    position:fixed;inset:0;z-index:20;
+    display:flex;align-items:center;justify-content:center;
+    background:rgba(4,8,18,0.72);
+    backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+    opacity:0;pointer-events:none;transition:opacity .2s ease;
+  }
+  #dropHint.show{opacity:1}
+  #dropHint .box{
+    padding:36px 54px;border-radius:20px;
+    border:1.5px dashed rgba(56,240,255,0.5);
+    font-size:15px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--neon-a);text-shadow:0 0 20px rgba(56,240,255,0.5);
+  }
+
+  #overlay{
+    position:fixed;inset:0;z-index:40;
+    display:none;align-items:center;justify-content:center;
+    padding:32px;text-align:center;
+    background:radial-gradient(circle at 50% 45%,#0a1024,#04050b);
+  }
+  #overlay.show{display:flex}
+  #overlay .card{max-width:440px}
+  #overlay h1{
+    font-size:15px;letter-spacing:.28em;text-transform:uppercase;
+    color:var(--neon-b);margin-bottom:16px;font-weight:600;
+  }
+  #overlay p{font-size:13.5px;line-height:1.7;color:var(--text-dim)}
+
+  @media (max-width:520px){
+    #hud{left:14px;right:14px;bottom:14px;width:auto}
+    #footer{right:16px;bottom:auto;top:16px}
+  }
+</style>
+
+<div id="footer">SyncSynth</div>
+
+<div id="hud" aria-label="controls">
+  <div class="title"><span class="dot"></span>SyncSynth · Swarm</div>
+  <div class="row">
+    <button class="src" id="btnMic" type="button">Microphone</button>
+    <button class="src alt" id="btnFile" type="button">Load Track</button>
+  </div>
+  <div class="ctrl">
+    <label>Intensity <span id="valInt">1.00</span></label>
+    <input type="range" id="rngInt" min="0.2" max="2" step="0.01" value="1">
+  </div>
+  <div class="ctrl">
+    <label>Hue <span id="valHue">Cyan</span></label>
+    <input type="range" id="rngHue" min="0" max="1" step="0.001" value="0.5">
+  </div>
+  <div id="status">Idle — pick <b>Microphone</b> or drop an audio file.</div>
+  <input type="file" id="fileInput" accept="audio/*" style="display:none">
+</div>
+
+<div id="dropHint"><div class="box">Release to play</div></div>
+
+<div id="overlay">
+  <div class="card">
+    <h1 id="ovTitle">Unavailable</h1>
+    <p id="ovMsg"></p>
+  </div>
+</div>
+
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var overlay = document.getElementById('overlay');
+  var ovTitle = document.getElementById('ovTitle');
+  var ovMsg   = document.getElementById('ovMsg');
+  function fatal(title, msg){
+    ovTitle.textContent = title;
+    ovMsg.textContent = msg;
+    overlay.classList.add('show');
+  }
+
+  // ---- dependency + WebGL guards -------------------------------------------
+  if (typeof THREE === 'undefined'){
+    fatal('Renderer Offline',
+      'The 3D engine could not be loaded from the network. Check your connection and reload — SyncSynth needs Three.js to render the swarm.');
+    return;
+  }
+  (function(){
+    try {
+      var c = document.createElement('canvas');
+      var gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+      if (!gl) throw 0;
+    } catch(e){
+      fatal('WebGL Unsupported',
+        'Your browser or device does not support WebGL. Enable hardware acceleration or try a modern desktop browser to run the visualiser.');
+      throw new Error('no-webgl');
+    }
+  })();
+
+  // ---- element refs ---------------------------------------------------------
+  var statusEl = document.getElementById('status');
+  var btnMic   = document.getElementById('btnMic');
+  var btnFile  = document.getElementById('btnFile');
+  var fileInput= document.getElementById('fileInput');
+  var rngInt   = document.getElementById('rngInt');
+  var rngHue   = document.getElementById('rngHue');
+  var valInt   = document.getElementById('valInt');
+  var valHue   = document.getElementById('valHue');
+  var dropHint = document.getElementById('dropHint');
+
+  function setStatus(html){ statusEl.innerHTML = html; }
+
+  // ---- renderer / scene -----------------------------------------------------
+  var renderer, scene, camera, swarm;
+  try {
+    renderer = new THREE.WebGLRenderer({ antialias:true, alpha:false, powerPreference:'high-performance' });
+  } catch(e){
+    fatal('Renderer Offline', 'WebGL context creation failed on this device.');
+    return;
+  }
+  var PR = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(PR);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setClearColor(0x04050b, 1);
+  document.body.appendChild(renderer.domElement);
+
+  scene = new THREE.Scene();
+  scene.fog = new THREE.FogExp2(0x04050b, 0.12);
+
+  camera = new THREE.PerspectiveCamera(50, window.innerWidth/window.innerHeight, 0.1, 100);
+  camera.position.set(0, 0, 7);
+
+  // ---- particle geometry (built once, reused) -------------------------------
+  var COUNT = 30000;
+  var positions = new Float32Array(COUNT * 3);
+  var rands     = new Float32Array(COUNT);
+  var GOLDEN = Math.PI * (3 - Math.sqrt(5));
+  for (var i=0;i<COUNT;i++){
+    // fibonacci sphere -> even, organic distribution
+    var y = 1 - (i / (COUNT - 1)) * 2;
+    var r = Math.sqrt(Math.max(0, 1 - y*y));
+    var theta = GOLDEN * i;
+    var x = Math.cos(theta) * r;
+    var z = Math.sin(theta) * r;
+    var jitter = 1 + (Math.random() - 0.5) * 0.05; // slight shell thickness
+    positions[i*3]   = x * jitter;
+    positions[i*3+1] = y * jitter;
+    positions[i*3+2] = z * jitter;
+    rands[i] = Math.random();
+  }
+  var geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('aRand', new THREE.BufferAttribute(rands, 1));
+
+  // ---- shaders --------------------------------------------------------------
+  var VERT = [
+    'precision highp float;',
+    'attribute float aRand;',
+    'uniform float uTime,uBass,uMid,uHigh,uIntensity,uSize,uPR;',
+    'varying float vEnergy;',
+    // Ashima simplex 3D noise
+    'vec4 permute(vec4 x){return mod(((x*34.0)+1.0)*x,289.0);}',
+    'vec4 taylorInvSqrt(vec4 r){return 1.79284291400159-0.85373472095314*r;}',
+    'float snoise(vec3 v){',
+    ' const vec2 C=vec2(1.0/6.0,1.0/3.0);const vec4 D=vec4(0.0,0.5,1.0,2.0);',
+    ' vec3 i=floor(v+dot(v,C.yyy));vec3 x0=v-i+dot(i,C.xxx);',
+    ' vec3 g=step(x0.yzx,x0.xyz);vec3 l=1.0-g;',
+    ' vec3 i1=min(g.xyz,l.zxy);vec3 i2=max(g.xyz,l.zxy);',
+    ' vec3 x1=x0-i1+C.xxx;vec3 x2=x0-i2+C.yyy;vec3 x3=x0-D.yyy;',
+    ' i=mod(i,289.0);',
+    ' vec4 p=permute(permute(permute(i.z+vec4(0.0,i1.z,i2.z,1.0))+i.y+vec4(0.0,i1.y,i2.y,1.0))+i.x+vec4(0.0,i1.x,i2.x,1.0));',
+    ' float n_=1.0/7.0;vec3 ns=n_*D.wyz-D.xzx;',
+    ' vec4 j=p-49.0*floor(p*ns.z*ns.z);',
+    ' vec4 x_=floor(j*ns.z);vec4 y_=floor(j-7.0*x_);',
+    ' vec4 x=x_*ns.x+ns.yyyy;vec4 y=y_*ns.x+ns.yyyy;',
+    ' vec4 h=1.0-abs(x)-abs(y);',
+    ' vec4 b0=vec4(x.xy,y.xy);vec4 b1=vec4(x.zw,y.zw);',
+    ' vec4 s0=floor(b0)*2.0+1.0;vec4 s1=floor(b1)*2.0+1.0;',
+    ' vec4 sh=-step(h,vec4(0.0));',
+    ' vec4 a0=b0.xzyw+s0.xzyw*sh.xxyy;vec4 a1=b1.xzyw+s1.xzyw*sh.zzww;',
+    ' vec3 p0=vec3(a0.xy,h.x);vec3 p1=vec3(a0.zw,h.y);vec3 p2=vec3(a1.xy,h.z);vec3 p3=vec3(a1.zw,h.w);',
+    ' vec4 norm=taylorInvSqrt(vec4(dot(p0,p0),dot(p1,p1),dot(p2,p2),dot(p3,p3)));',
+    ' p0*=norm.x;p1*=norm.y;p2*=norm.z;p3*=norm.w;',
+    ' vec4 m=max(0.6-vec4(dot(x0,x0),dot(x1,x1),dot(x2,x2),dot(x3,x3)),0.0);m=m*m;',
+    ' return 42.0*dot(m*m,vec4(dot(p0,x0),dot(p1,x1),dot(p2,x2),dot(p3,x3)));',
+    '}',
+    'void main(){',
+    ' vec3 dir=normalize(position);',
+    ' float t=uTime*0.15;',
+    ' float n1=snoise(position*1.5+vec3(0.0,0.0,t));',
+    ' float n2=snoise(position*3.1-vec3(t*1.3,t*0.7,0.0));',
+    ' float turb=n1*0.6+n2*0.4;',
+    ' float amp=0.12+uMid*0.6+uHigh*0.35;',        // mid = surface waves, high = fine turbulence
+    ' float disp=turb*amp*uIntensity;',
+    ' float radius=1.7+uBass*0.5*uIntensity+sin(t*2.0+aRand*6.2831)*0.03;', // bass = expand/contract
+    ' vec3 pos=dir*(radius+disp);',
+    ' vEnergy=clamp(abs(turb)*0.7+uHigh*0.6+abs(disp)*0.6,0.0,1.4);',
+    ' vec4 mv=modelViewMatrix*vec4(pos,1.0);',
+    ' gl_Position=projectionMatrix*mv;',
+    ' float sz=uSize*(0.55+aRand*0.9)*(1.0+uHigh*1.6+uBass*0.4);',
+    ' gl_PointSize=sz*uPR*(1.0/max(0.001,-mv.z));',
+    '}'
+  ].join('\n');
+
+  var FRAG = [
+    'precision highp float;',
+    'uniform float uHue;',
+    'varying float vEnergy;',
+    'vec3 hsv2rgb(vec3 c){',
+    ' vec4 K=vec4(1.0,2.0/3.0,1.0/3.0,3.0);',
+    ' vec3 p=abs(fract(c.xxx+K.xyz)*6.0-K.www);',
+    ' return c.z*mix(K.xxx,clamp(p-K.xxx,0.0,1.0),c.y);',
+    '}',
+    'void main(){',
+    ' vec2 uv=gl_PointCoord-0.5;',
+    ' float d=length(uv);',
+    ' if(d>0.5) discard;',
+    ' float glow=pow(smoothstep(0.5,0.0,d),1.7);',
+    ' float hue=uHue+vEnergy*0.30;',       // cyan -> magenta with energy
+    ' float sat=0.9-vEnergy*0.28;',
+    ' vec3 col=hsv2rgb(vec3(hue,sat,1.0));',
+    ' float bright=0.30+vEnergy*0.95;',
+    ' gl_FragColor=vec4(col*bright,glow);',
+    '}'
+  ].join('\n');
+
+  var uniforms = {
+    uTime:{value:0}, uBass:{value:0}, uMid:{value:0}, uHigh:{value:0},
+    uIntensity:{value:1.0}, uSize:{value:15.0}, uPR:{value:PR},
+    uHue:{value:0.5}
+  };
+
+  var material = new THREE.ShaderMaterial({
+    uniforms:uniforms,
+    vertexShader:VERT,
+    fragmentShader:FRAG,
+    transparent:true,
+    depthWrite:false,
+    depthTest:false,
+    blending:THREE.AdditiveBlending
+  });
+
+  swarm = new THREE.Points(geometry, material);
+  scene.add(swarm);
+
+  // ---- audio ----------------------------------------------------------------
+  var audioCtx=null, analyser=null, freqData=null;
+  var currentSourceNode=null, currentEl=null, currentStream=null;
+  var mode='idle';
+  var smBass=0.12, smMid=0.10, smHigh=0.06;   // smoothed bands
+
+  function ensureCtx(){
+    if (audioCtx) return true;
+    try {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.8;
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+      return true;
+    } catch(e){
+      setStatus('Audio engine unavailable on this device.');
+      return false;
+    }
+  }
+
+  function teardownSource(){
+    try { if (currentSourceNode) currentSourceNode.disconnect(); } catch(e){}
+    if (currentEl){ try{ currentEl.pause(); }catch(e){} }
+    if (currentStream){
+      var tr = currentStream.getTracks();
+      for (var k=0;k<tr.length;k++){ try{ tr[k].stop(); }catch(e){} }
+    }
+    currentSourceNode=null; currentEl=null; currentStream=null;
+  }
+
+  function setActive(which){
+    btnMic.classList.toggle('active', which==='mic');
+    btnFile.classList.toggle('active', which==='file');
+  }
+
+  function startMic(){
+    if (!ensureCtx()) return;
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+      setStatus('Microphone API not available in this browser.'); return;
+    }
+    setStatus('Requesting microphone…');
+    audioCtx.resume();
+    navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:false}})
+      .then(function(stream){
+        teardownSource();
+        currentStream = stream;
+        var src = audioCtx.createMediaStreamSource(stream);
+        src.connect(analyser);           // analysis only — not to speakers (no feedback)
+        currentSourceNode = src;
+        mode='mic'; setActive('mic');
+        setStatus('Live input — <b>Microphone</b>. Play music near the mic.');
+      })
+      .catch(function(err){
+        var msg = (err && err.name==='NotAllowedError')
+          ? 'Microphone permission was denied.'
+          : 'Could not access the microphone.';
+        setStatus(msg);
+      });
+  }
+
+  function playFile(file){
+    if (!file){ return; }
+    if (!/^audio\//.test(file.type) && !/\.(mp3|wav|ogg|m4a|flac|aac)$/i.test(file.name)){
+      setStatus('That file is not a recognised audio format.'); return;
+    }
+    if (!ensureCtx()) return;
+    audioCtx.resume();
+    teardownSource();
+    var url = URL.createObjectURL(file);
+    var el = new Audio();
+    el.src = url; el.loop = true; el.crossOrigin='anonymous';
+    currentEl = el;
+    el.addEventListener('canplay', function(){ URL.revokeObjectURL(url); }, {once:true});
+    var srcNode = audioCtx.createMediaElementSource(el);
+    srcNode.connect(analyser);              // analysis tap
+    srcNode.connect(audioCtx.destination);  // audible playback
+    currentSourceNode = srcNode;
+    el.play().then(function(){
+      mode='file'; setActive('file');
+      var nm = file.name.length>26 ? file.name.slice(0,24)+'…' : file.name;
+      setStatus('Playing <b>'+nm.replace(/</g,'&lt;')+'</b> · looping.');
+    }).catch(function(){
+      setStatus('Playback was blocked — click <b>Load Track</b> again.');
+    });
+  }
+
+  // band extraction (no per-frame allocation)
+  function readBands(){
+    if (!analyser){ return null; }
+    analyser.getByteFrequencyData(freqData);
+    var i, sum;
+    sum=0; for(i=2;i<16;i++) sum+=freqData[i];       var bass=(sum/14)/255;
+    sum=0; for(i=16;i<120;i++) sum+=freqData[i];     var mid =(sum/104)/255;
+    sum=0; for(i=120;i<500;i++) sum+=freqData[i];    var high=(sum/380)/255;
+    bass=Math.pow(bass,1.4)*1.35;
+    mid =Math.pow(mid ,1.2)*1.25;
+    high=Math.pow(high,1.05)*1.5;
+    _b3[0]=bass; _b3[1]=mid; _b3[2]=high;
+    return _b3;
+  }
+  var _b3=[0,0,0]; // reused triplet — no allocation in loop
+
+  // ---- UI wiring ------------------------------------------------------------
+  var HUES=[[0,'Red'],[0.08,'Amber'],[0.16,'Gold'],[0.33,'Green'],[0.5,'Cyan'],[0.62,'Azure'],[0.72,'Violet'],[0.83,'Magenta'],[0.92,'Rose']];
+  function hueName(v){
+    var best=HUES[0], bd=9;
+    for(var i=0;i<HUES.length;i++){ var d=Math.abs(HUES[i][0]-v); if(d<bd){bd=d;best=HUES[i];} }
+    return best[1];
+  }
+  rngInt.addEventListener('input', function(){
+    uniforms.uIntensity.value=parseFloat(rngInt.value);
+    valInt.textContent=parseFloat(rngInt.value).toFixed(2);
+  });
+  rngHue.addEventListener('input', function(){
+    uniforms.uHue.value=parseFloat(rngHue.value);
+    valHue.textContent=hueName(parseFloat(rngHue.value));
+  });
+  btnMic.addEventListener('click', startMic);
+  btnFile.addEventListener('click', function(){ fileInput.click(); });
+  fileInput.addEventListener('change', function(){ if(fileInput.files[0]) playFile(fileInput.files[0]); fileInput.value=''; });
+
+  // drag + drop anywhere
+  var dragDepth=0;
+  window.addEventListener('dragenter', function(e){ e.preventDefault(); dragDepth++; dropHint.classList.add('show'); });
+  window.addEventListener('dragover', function(e){ e.preventDefault(); });
+  window.addEventListener('dragleave', function(e){ e.preventDefault(); dragDepth=Math.max(0,dragDepth-1); if(!dragDepth) dropHint.classList.remove('show'); });
+  window.addEventListener('drop', function(e){
+    e.preventDefault(); dragDepth=0; dropHint.classList.remove('show');
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) playFile(e.dataTransfer.files[0]);
+  });
+
+  // ---- resize ---------------------------------------------------------------
+  function onResize(){
+    var w=window.innerWidth, h=window.innerHeight;
+    camera.aspect=w/h; camera.updateProjectionMatrix();
+    renderer.setSize(w,h);
+  }
+  window.addEventListener('resize', onResize);
+
+  // ---- render loop ----------------------------------------------------------
+  var last=performance.now();
+  var idlePhase=0;
+  function tick(now){
+    requestAnimationFrame(tick);
+    var dt=Math.min(0.05,(now-last)/1000); last=now;
+    var t=now*0.001;
+    uniforms.uTime.value=t;
+
+    var tBass,tMid,tHigh;
+    if (mode!=='idle'){
+      var b=readBands();
+      if (b){ tBass=b[0]; tMid=b[1]; tHigh=b[2]; } else { tBass=tMid=tHigh=0; }
+    } else {
+      // gentle autonomous breathing so it is never static
+      idlePhase+=dt;
+      tBass=0.14+0.11*Math.sin(idlePhase*0.8);
+      tMid =0.10+0.07*Math.sin(idlePhase*0.53+1.0);
+      tHigh=0.05+0.045*Math.sin(idlePhase*1.27+2.0);
+    }
+    // frame-rate-independent smoothing toward targets
+    var s=1-Math.pow(0.001,dt);
+    smBass+=(tBass-smBass)*s*3.2;
+    smMid +=(tMid -smMid )*s*3.6;
+    smHigh+=(tHigh-smHigh)*s*4.2;
+    uniforms.uBass.value=smBass;
+    uniforms.uMid.value =smMid;
+    uniforms.uHigh.value=smHigh;
+
+    // slow, hypnotic rotation; high freq nudges spin
+    swarm.rotation.y += dt*(0.06+smHigh*0.35);
+    swarm.rotation.x  = Math.sin(t*0.11)*0.18;
+    camera.position.x = Math.sin(t*0.07)*0.5;
+    camera.position.y = Math.cos(t*0.09)*0.35;
+    camera.lookAt(0,0,0);
+
+    renderer.render(scene,camera);
+  }
+  requestAnimationFrame(tick);
+
+})();
+</script>
