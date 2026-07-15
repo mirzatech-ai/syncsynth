@@ -4,127 +4,106 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SyncSynth — Visuals that move with the music</title>
-<meta name="description" content="SyncSynth is an audio-reactive visual engine. Drop a track or turn on your mic and watch hand-built WebGL worlds move to the sound — for streams, VJ sets, and video.">
+<meta name="description" content="An audio-reactive visual engine. Drop a track or turn on your mic and watch hand-built WebGL worlds move to the sound. Full-screen, live, in the browser.">
 <meta property="og:title" content="SyncSynth — Visuals that move with the music">
-<meta property="og:description" content="Audio-reactive WebGL visuals. Drop a track, watch it come alive.">
+<meta property="og:description" content="Audio-reactive WebGL worlds. Drop a track, watch it come alive.">
 <meta property="og:type" content="website">
 <style>
   :root{
-    --bg:#05060a; --bg2:#0a0b12;
-    --ink:#f3f5fb; --muted:#8a90a6;
-    --accent:#16f2ff; --accent2:#ff2d95;
-    --line:rgba(255,255,255,.08);
+    --ink:#f4f6fc; --muted:#aab0c6; --accent:#16f2ff; --accent2:#ff2d95;
     --sans:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
     --mono:ui-monospace,"Cascadia Mono","SF Mono",Menlo,Consolas,monospace;
   }
   *{margin:0;padding:0;box-sizing:border-box}
-  html{scroll-behavior:smooth}
-  body{background:var(--bg);color:var(--ink);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
-  a{color:inherit;text-decoration:none}
+  html,body{height:100%;background:#04050a;color:var(--ink);font-family:var(--sans);overflow:hidden}
 
-  /* ---------- hero: a live module playing behind the copy ---------- */
-  .hero{position:relative;height:100svh;min-height:600px;overflow:hidden;display:flex;align-items:center}
-  .hero iframe{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none;z-index:0;opacity:.9}
-  .hero .scrim{position:absolute;inset:0;z-index:1;
-    background:linear-gradient(90deg,rgba(5,6,10,.94) 0%,rgba(5,6,10,.72) 42%,rgba(5,6,10,.25) 100%),
-               linear-gradient(0deg,rgba(5,6,10,.9),rgba(5,6,10,0) 40%)}
-  .hero .wrap{position:relative;z-index:2;max-width:1180px;margin:0 auto;padding:0 32px;width:100%}
-  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.32em;text-transform:uppercase;color:var(--accent);margin-bottom:20px;display:flex;align-items:center;gap:10px}
-  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
-  h1{font-size:clamp(38px,6vw,74px);line-height:1.02;font-weight:800;letter-spacing:-.02em;max-width:14ch}
-  h1 em{font-style:normal;background:linear-gradient(90deg,var(--accent2),var(--accent));-webkit-background-clip:text;background-clip:text;color:transparent}
-  .sub{margin-top:22px;font-size:clamp(15px,1.6vw,19px);line-height:1.6;color:var(--muted);max-width:52ch}
-  .cta-row{margin-top:36px;display:flex;gap:14px;flex-wrap:wrap}
-  .btn{display:inline-flex;align-items:center;gap:9px;padding:14px 26px;border-radius:11px;font-weight:700;font-size:14px;letter-spacing:.02em;transition:.22s}
-  .btn.primary{background:var(--accent);color:#04121a;box-shadow:0 0 0 1px rgba(22,242,255,.4)}
-  .btn.primary:hover{box-shadow:0 0 28px rgba(22,242,255,.55);transform:translateY(-1px)}
-  .btn.ghost{border:1px solid var(--line);color:var(--ink)}
-  .btn.ghost:hover{border-color:var(--accent);color:#fff}
+  /* THE VISUAL IS THE PAGE — full-bleed live hero */
+  #stage{position:fixed;inset:0;z-index:0;background:#04050a}
+  #stage iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block}
 
-  /* ---------- gallery ---------- */
-  .section{max-width:1180px;margin:0 auto;padding:100px 32px}
-  .section .k{font-family:var(--mono);font-size:12px;letter-spacing:.28em;text-transform:uppercase;color:var(--muted)}
-  .section h2{font-size:clamp(26px,3.5vw,40px);font-weight:800;letter-spacing:-.01em;margin:12px 0 8px}
-  .section .lede{color:var(--muted);font-size:16px;max-width:56ch;line-height:1.6}
-  .grid{margin-top:44px;display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:22px}
-  .card{position:relative;border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--bg2);transition:.25s;display:block}
-  .card:hover{border-color:rgba(22,242,255,.4);transform:translateY(-4px);box-shadow:0 24px 60px rgba(0,0,0,.5)}
-  .card .frame{position:relative;aspect-ratio:16/10;overflow:hidden;background:#000}
-  .card iframe{position:absolute;inset:0;width:100%;height:100%;border:0;pointer-events:none}
-  .card .meta{padding:18px 20px 20px}
-  .card .meta .tag{font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
-  .card .meta h3{font-size:19px;font-weight:700;margin:6px 0 5px}
-  .card .meta p{font-size:13.5px;color:var(--muted);line-height:1.5}
-  .card .open{position:absolute;top:14px;right:14px;z-index:3;font-family:var(--mono);font-size:10px;letter-spacing:.14em;text-transform:uppercase;
-    background:rgba(5,6,10,.7);backdrop-filter:blur(6px);border:1px solid var(--line);padding:6px 11px;border-radius:20px;color:#fff}
+  /* top bar */
+  header{position:fixed;top:0;left:0;right:0;z-index:20;display:flex;align-items:center;justify-content:space-between;
+    padding:18px 24px;background:linear-gradient(180deg,rgba(4,5,10,.6),transparent);pointer-events:none}
+  .brand{display:flex;align-items:center;gap:10px;pointer-events:auto}
+  .brand .dot{width:9px;height:9px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent);animation:pulse 2.4s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.4}50%{opacity:1}}
+  .brand b{font-size:16px;letter-spacing:.14em;font-weight:800}
+  .brand b span{color:var(--accent2)}
+  header .right{display:flex;gap:8px;align-items:center;pointer-events:auto}
+  header .tagline{font-family:var(--mono);font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--muted);margin-right:6px}
+  .fs{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink);
+    border:1px solid rgba(255,255,255,.16);padding:8px 14px;border-radius:20px;text-decoration:none;transition:.2s;background:rgba(4,5,10,.4);backdrop-filter:blur(8px)}
+  .fs:hover{border-color:var(--accent);color:#fff}
 
-  /* how */
-  .how{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:20px;margin-top:44px}
-  .step{border-top:1px solid var(--line);padding-top:20px}
-  .step .n{font-family:var(--mono);color:var(--accent);font-size:13px;letter-spacing:.1em}
-  .step h4{font-size:17px;font-weight:700;margin:10px 0 7px}
-  .step p{font-size:13.5px;color:var(--muted);line-height:1.55}
+  /* WORLD SWITCHER — each visual takes the hero spot */
+  #switcher{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:20;
+    display:flex;gap:10px;padding:10px;border-radius:16px;
+    background:rgba(6,7,14,.55);backdrop-filter:blur(16px) saturate(140%);border:1px solid rgba(255,255,255,.1);
+    box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .world{appearance:none;cursor:pointer;font:inherit;color:var(--muted);background:transparent;border:1px solid transparent;
+    border-radius:11px;padding:9px 15px;font-size:12.5px;font-weight:600;letter-spacing:.02em;transition:.18s;white-space:nowrap;display:flex;flex-direction:column;align-items:center;gap:2px;line-height:1.1}
+  .world small{font-family:var(--mono);font-size:9px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);opacity:.7}
+  .world:hover{color:#fff;border-color:rgba(255,255,255,.14)}
+  .world.active{color:#04121a;background:linear-gradient(180deg,var(--accent),#0bd6e6);border-color:transparent}
+  .world.active small{color:rgba(4,18,26,.75)}
 
-  footer{border-top:1px solid var(--line);padding:34px 32px;text-align:center}
-  footer .fmono{font-family:var(--mono);font-size:11px;letter-spacing:.16em;color:var(--muted);text-transform:uppercase}
-  footer .brand{margin-top:8px;font-size:11px;color:#4a4f61;letter-spacing:.1em}
-  @media(max-width:640px){.hero .scrim{background:linear-gradient(0deg,rgba(5,6,10,.95),rgba(5,6,10,.5))}}
+  /* first-load hint */
+  #hint{position:fixed;left:50%;bottom:96px;transform:translateX(-50%);z-index:19;
+    font-family:var(--mono);font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    background:rgba(6,7,14,.5);backdrop-filter:blur(8px);padding:8px 16px;border-radius:20px;border:1px solid rgba(255,255,255,.08);
+    transition:opacity .6s;pointer-events:none}
+  #hint b{color:var(--accent2)}
+  #hint.gone{opacity:0}
+
+  footer{position:fixed;right:24px;bottom:30px;z-index:18;font-family:var(--mono);font-size:10px;letter-spacing:.14em;color:rgba(170,176,198,.55);text-transform:uppercase;pointer-events:none}
+  @media(max-width:680px){
+    #switcher{gap:5px;padding:7px;bottom:18px;width:calc(100% - 24px);overflow-x:auto;justify-content:flex-start}
+    .world{padding:8px 11px;font-size:11px}
+    header .tagline{display:none}
+    footer{display:none}
+  }
 </style>
 </head>
 <body>
 
-<section class="hero">
-  <iframe src="modules/syncsynth-waveform-terrain.html" title="live audio-reactive background" loading="eager" tabindex="-1"></iframe>
-  <div class="scrim"></div>
-  <div class="wrap">
-    <div class="eyebrow"><span class="dot"></span>Audio-Reactive Visual Engine</div>
-    <h1>Visuals that <em>move with the music.</em></h1>
-    <p class="sub">Drop a track or turn on your mic. Hand-built WebGL worlds react to every beat — live, in the browser. Built for streams, VJ sets, and video that doesn't look like everything else.</p>
-    <div class="cta-row">
-      <a class="btn primary" href="#gallery">▶ See it react</a>
-      <a class="btn ghost" href="modules/syncsynth-waveform-terrain.html">Open fullscreen</a>
-    </div>
+<div id="stage">
+  <iframe id="hero" src="modules/syncsynth-waveform-terrain.html" title="live audio-reactive visual" allow="microphone" loading="eager"></iframe>
+</div>
+
+<header>
+  <div class="brand"><span class="dot"></span><b>SYNC<span>SYNTH</span></b></div>
+  <div class="right">
+    <span class="tagline">Visuals that move with the music</span>
+    <a class="fs" id="fsLink" href="modules/syncsynth-waveform-terrain.html" target="_blank" rel="noopener">Open ↗</a>
   </div>
-</section>
+</header>
 
-<section class="section" id="gallery">
-  <div class="k">The Modules</div>
-  <h2>Four worlds, live and reacting.</h2>
-  <p class="lede">Each is a self-contained visual you can drive with any song. Click one to open it fullscreen, then drop an mp3 or hit the mic.</p>
-  <div class="grid">
-    <a class="card" href="modules/syncsynth-waveform-terrain.html">
-      <div class="frame"><span class="open">Open ↗</span><iframe src="modules/syncsynth-waveform-terrain.html" loading="lazy" tabindex="-1"></iframe></div>
-      <div class="meta"><div class="tag">Synthwave</div><h3>Waveform Terrain</h3><p>A neon wireframe landscape that rises and rolls with the spectrum, under a glowing sun. The lofi-stream classic.</p></div>
-    </a>
-    <a class="card" href="modules/liquid-metal-orb.html">
-      <div class="frame"><span class="open">Open ↗</span><iframe src="modules/liquid-metal-orb.html" loading="lazy" tabindex="-1"></iframe></div>
-      <div class="meta"><div class="tag">Showpiece</div><h3>Liquid Metal Orb</h3><p>An iridescent chrome orb that ripples and morphs to the waveform, floating in a field of light.</p></div>
-    </a>
-    <a class="card" href="modules/syncsynth-cyber-tunnel.html">
-      <div class="frame"><span class="open">Open ↗</span><iframe src="modules/syncsynth-cyber-tunnel.html" loading="lazy" tabindex="-1"></iframe></div>
-      <div class="meta"><div class="tag">Hypnotic</div><h3>Cyber Tunnel</h3><p>An endless light-tunnel you fall through; ring spacing and hue pulse with the bass. A perfect binge-loop.</p></div>
-    </a>
-    <a class="card" href="modules/syncsynth-neon-particle-swarm.html">
-      <div class="frame"><span class="open">Open ↗</span><iframe src="modules/syncsynth-neon-particle-swarm.html" loading="lazy" tabindex="-1"></iframe></div>
-      <div class="meta"><div class="tag">Organic</div><h3>Neon Particle Swarm</h3><p>Thousands of points breathing as one sphere, turbulence driven by the highs. Alive and endless.</p></div>
-    </a>
-  </div>
-</section>
+<div id="hint">Drop a track or hit <b>the mic</b> inside the visual — it reacts live</div>
 
-<section class="section" style="padding-top:0">
-  <div class="k">How it works</div>
-  <h2>No editing. No timeline. Just sound.</h2>
-  <div class="how">
-    <div class="step"><div class="n">01</div><h4>Pick a world</h4><p>Open any module fullscreen in the browser — nothing to install.</p></div>
-    <div class="step"><div class="n">02</div><h4>Feed it audio</h4><p>Drop an mp3/wav, or turn on the mic. Bass, mids and highs each drive the visuals differently.</p></div>
-    <div class="step"><div class="n">03</div><h4>Watch it move</h4><p>The scene reacts in real time — record it, stream it, or perform it live.</p></div>
-  </div>
-</section>
+<nav id="switcher">
+  <button class="world active" data-src="modules/syncsynth-waveform-terrain.html">Waveform Terrain<small>Synthwave</small></button>
+  <button class="world" data-src="modules/liquid-metal-orb.html">Liquid Metal Orb<small>Showpiece</small></button>
+  <button class="world" data-src="modules/syncsynth-cyber-tunnel.html">Cyber Tunnel<small>Hypnotic</small></button>
+  <button class="world" data-src="modules/syncsynth-neon-particle-swarm.html">Particle Swarm<small>Organic</small></button>
+</nav>
 
-<footer>
-  <div class="fmono">SyncSynth — audio-reactive visual engine</div>
-  <div class="brand">Powered by MirzaTech.ai · Property of EMAAA.io</div>
-</footer>
+<footer>Powered by MirzaTech.ai · Property of EMAAA.io</footer>
 
+<script>
+  const hero = document.getElementById('hero');
+  const fsLink = document.getElementById('fsLink');
+  const worlds = document.querySelectorAll('.world');
+  const hint = document.getElementById('hint');
+  worlds.forEach(btn => btn.addEventListener('click', () => {
+    const src = btn.dataset.src;
+    if (hero.getAttribute('src') === src) return;
+    worlds.forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    hero.setAttribute('src', src);      // the chosen visual takes the full hero
+    fsLink.setAttribute('href', src);
+  }));
+  // fade the hint after a bit
+  setTimeout(() => hint.classList.add('gone'), 6000);
+</script>
 </body>
 </html>
